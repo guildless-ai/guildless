@@ -31,12 +31,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kokoaru-ltd/guildless.git"
+    "url": "git+https://github.com/kokoaru-ltd/guildless-verify.git"
   },
   "bugs": {
-    "url": "https://github.com/kokoaru-ltd/guildless/issues"
+    "url": "https://github.com/kokoaru-ltd/guildless-verify/issues"
   },
-  "homepage": "https://github.com/kokoaru-ltd/guildless#readme",
+  "homepage": "https://github.com/kokoaru-ltd/guildless-verify#readme",
   "dependencies": {
     "yaml": "^2.8.1"
   },
