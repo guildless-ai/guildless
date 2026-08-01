@@ -72,6 +72,8 @@ In GitHub Actions:
   run: npx guildless verify --config guildless.yml
 ```
 
+The repository includes `.github/ci.example.yml`; copy it to `.github/workflows/ci.yml` to enable the project CI workflow.
+
 Pin a released version in production workflows for reproducibility.
 
 ## Why not model voting?
