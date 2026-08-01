@@ -1,0 +1,8 @@
+testedCommit: "HEAD"
+commands:
+  - "npm test"
+urls:
+  - url: "https://example.com"
+    status: 200
+unverifiedScope:
+  - "Accessibility was not manually audited"

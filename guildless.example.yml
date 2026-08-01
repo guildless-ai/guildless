@@ -1,0 +1,14 @@
+# Replace this with the exact commit that was tested.
+testedCommit: "HEAD"
+
+commands:
+  - "npm test"
+
+urls:
+  - url: "https://example.com/health"
+    status: 200
+    timeoutMs: 10000
+
+# Declaring "none" is valid when the verification really covers everything.
+unverifiedScope:
+  - "Manual browser behavior was not verified"
