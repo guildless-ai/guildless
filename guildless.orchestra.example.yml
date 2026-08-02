@@ -1,0 +1,29 @@
+objective: "Implement the cross-review scheduler"
+
+agents:
+  planner: 1
+  builders: 3
+  reviewers: 3
+  breakers: 1
+  fixers: 2
+
+review_policy:
+  self_review: false
+  cross_review: true
+  minimum_reviews_per_task: 2
+
+verification:
+  commands:
+    - npm run build
+    - npm test
+    - npm run lint
+  git_diff_check: true
+  # http:
+  #   - url: "https://example.com/health"
+  #     status: 200
+  max_fix_rounds: 2
+
+# Optional: point agents at real LLM CLIs (e.g. `claude -p`, `codex exec`, `gemini`)
+# that read --input and write --output as JSON. Defaults to the built-in demo agents.
+# agent_commands:
+#   planner: "claude -p \"read {input} and plan, write result to {output}\""

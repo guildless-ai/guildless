@@ -4,5 +4,10 @@ export function checkUnverifiedScope(scope: string[]): CheckResult {
   const declared = scope.length > 0 && scope.every((item) => item.trim().length > 0);
   return declared
     ? { id: "unverified-scope", ok: true, summary: "Unverified scope was declared", detail: scope.join("; ") }
-    : { id: "unverified-scope", ok: false, summary: "Unverified scope was not declared" };
+    : {
+        id: "unverified-scope",
+        ok: false,
+        summary: "Unverified scope was not declared",
+        recommendation: "Add an unverifiedScope entry to guildless.yml describing what was not verified"
+      };
 }

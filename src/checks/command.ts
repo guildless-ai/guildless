@@ -20,9 +20,14 @@ export async function checkCommands(cwd: string, commands: string[]): Promise<Ch
         id: "command",
         ok: false,
         summary: `Command failed: ${command}`,
-        detail: `exit ${result.code ?? "unknown"}${result.output ? `\n${result.output}` : ""}`
+        detail: `exit ${result.code ?? "unknown"}${result.output ? `\n${result.output}` : ""}`,
+        recommendation: "Fix the failing command locally, then re-run"
       };
     }
   }
-  return { id: "command", ok: true, summary: commands.length === 1 ? "Command passed" : `${commands.length} commands passed` };
+  return {
+    id: "command",
+    ok: true,
+    summary: commands.length === 1 ? "Command passed" : `${commands.length} commands passed`
+  };
 }

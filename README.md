@@ -30,15 +30,93 @@ unverifiedScope:
 
 The command exits with `0` only when all five gates pass. A rejected claim exits with `1`; invalid CLI usage exits with `2`.
 
+The default (concise) output hides per-check details and shows PASS/FAIL, a
+summary, the next recommended action, and where full evidence was saved:
+
 ```text
 GUILDLESS: REJECTED
 
-✓ Tests passed
-✗ Tested commit differs from current HEAD
-✗ Production URL returned 404
-✗ Unverified scope was not declared
+✗ git-clean: 2 uncommitted changes
+✗ commit-match: Tested commit differs from current HEAD
+✗ http: URL returned 404 (expected 200)
 
-AI completion claim was rejected.
+Next:
+  • Commit or stash the uncommitted changes, then re-run
+  • Commit the tested work, or update testedCommit in guildless.yml to match HEAD
+  Re-run: guildless verify
+
+Evidence: .guildless/runs/20260802-123456-ab12/evidence.json
+```
+
+## CLI options
+
+| Option       | Effect                                                                 |
+|--------------|------------------------------------------------------------------------|
+| (default)    | Concise output: PASS/FAIL, summary, next action, evidence path          |
+| `--verbose`  | Shows each check's detail: changed file list, command output, HTTP details |
+| `--json`     | Prints the complete report as JSON to stdout (nothing else) and exit 0/1/2 |
+| `--quiet`    | No output on success (exit 0); one-line failure reason on error (exit 1) |
+| `--config`   | Path to `guildless.yml` (default: auto-detected in the current directory) |
+| `--help`     | Show usage                                                              |
+
+Every run saves full evidence to `.guildless/runs/<run-id>/evidence.json`
+(contract, checks, details). The `.guildless` directory is ignored by the
+git-clean gate so saved evidence never fails a later run.
+
+## Cross-review orchestration
+
+`guildless orchestrate` is the multi-agent scheduling layer. It turns the
+serial "one agent does the work, one agent checks it" flow into a parallel
+matrix where no agent reviews its own output:
+
+```sh
+npx guildless orchestrate --config guildless.orchestra.yml
+```
+
+```text
+GUILDLESS ORCHESTRATION
+
+Objective: Implement the cross-review scheduler
+
+Planner       ✓
+Builders      3/3
+Reviews       6
+Fix round     0/2
+Breaker       ✓
+Verifier      PASS
+
+Verdict: ACCEPTED
+Evidence: .guildless/runs/20260802-123456-ab12/evidence.json
+```
+
+Workflow: a Planner breaks the objective into tasks → N Builders implement in
+parallel → each Builder's output is reviewed by the *other* reviewers (bug/requirements,
+security/permissions, test coverage), findings are aggregated into a consensus →
+Fixers resolve findings (bounded by `max_fix_rounds`) → a Breaker adds counterexample
+tests → the machine Verifier runs the configured commands (`npm run build`, `npm test`,
+`npm run lint`, `git diff --check`, HTTP checks) and returns the final verdict.
+Agent wall-climbing output is never shown — only stage status.
+
+Agents are subprocesses speaking a JSON protocol (`--input`/`--output` files).
+The package ships demo agents; point `agent_commands` at real LLM CLIs to use
+actual models:
+
+```yaml
+agents:
+  planner: 1
+  builders: 3
+  reviewers: 3
+  breakers: 1
+  fixers: 2
+
+review_policy:
+  self_review: false          # nobody reviews their own work
+  cross_review: true
+  minimum_reviews_per_task: 2
+
+verification:
+  commands: [npm run build, npm test, npm run lint]
+  max_fix_rounds: 2
 ```
 
 ## The five gates

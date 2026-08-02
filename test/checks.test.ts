@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -28,7 +28,36 @@ test("checks git cleanliness and exact commit identity", async () => {
     assert.equal((await checkGitClean(cwd)).ok, true);
     assert.equal((await checkCommitMatch(cwd, stdout.trim())).ok, true);
     await writeFile(path.join(cwd, "file.txt"), "two");
-    assert.equal((await checkGitClean(cwd)).ok, false);
+    const dirty = await checkGitClean(cwd);
+    assert.equal(dirty.ok, false);
+    assert.match(dirty.summary, /^1 uncommitted change$/);
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test("git-clean counts changes and ignores the .guildless evidence directory", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "guildless-"));
+  try {
+    await exec("git", ["init"], { cwd });
+    await exec("git", ["config", "user.email", "test@example.com"], { cwd });
+    await exec("git", ["config", "user.name", "Test"], { cwd });
+    await writeFile(path.join(cwd, "file.txt"), "one");
+    await exec("git", ["add", "file.txt"], { cwd });
+    await exec("git", ["commit", "-m", "first"], { cwd });
+
+    const evidenceDir = path.join(cwd, ".guildless", "runs", "x");
+    await mkdir(evidenceDir, { recursive: true });
+    await writeFile(path.join(evidenceDir, "evidence.json"), "{}");
+    assert.equal((await checkGitClean(cwd)).ok, true, "evidence dir must not dirty the tree");
+
+    await writeFile(path.join(cwd, "file.txt"), "two");
+    await writeFile(path.join(cwd, "wip.txt"), "x");
+    const dirty = await checkGitClean(cwd);
+    assert.equal(dirty.ok, false);
+    assert.match(dirty.summary, /^2 uncommitted changes$/);
+    assert.match(dirty.detail ?? "", /wip\.txt/);
+    assert.ok(!(dirty.detail ?? "").includes(".guildless"));
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }
