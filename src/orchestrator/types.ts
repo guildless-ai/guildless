@@ -25,6 +25,9 @@ export interface VerificationConfig {
   gitDiffCheck: boolean;
   http: HttpTarget[];
   maxFixRounds: number;
+  commandTimeoutMs?: number;
+  designDocuments?: string[];
+  designDecisionsFile?: string;
 }
 
 export interface OrchestraConfig {
@@ -106,10 +109,20 @@ export interface BreakerOutput {
 
 export interface VerifyResult {
   id: string;
-  kind: "command" | "git-diff-check" | "http";
+  kind: "command" | "git-diff-check" | "http" | "design";
   label: string;
   ok: boolean;
   detail?: string;
+}
+
+export interface AgentMetric {
+  role: AgentRole;
+  id: string;
+  model?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  elapsedMs?: number;
+  cost?: number;
 }
 
 export interface OrchestrationResult {
@@ -127,6 +140,7 @@ export interface OrchestrationResult {
   verify: VerifyResult[];
   verdict: "ACCEPTED" | "REJECTED";
   errors: string[];
+  agentMetrics: AgentMetric[];
   evidencePath: string | null;
   startedAt: string;
   finishedAt: string;

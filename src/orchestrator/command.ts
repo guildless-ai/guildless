@@ -1,6 +1,7 @@
 import { access } from "node:fs/promises";
 import path from "node:path";
 import { loadOrchestraConfig } from "./config.js";
+import { EventLog } from "./events.js";
 import { renderQuietVerdict, renderStatusBoard } from "./ui.js";
 import { orchestrate } from "./workflow.js";
 
@@ -33,7 +34,7 @@ export async function orchestrateCommand(argv: string[], cwd: string): Promise<n
     return 2;
   }
 
-  const result = await orchestrate(cwd, contract);
+  const result = await orchestrate(cwd, contract, new EventLog(cwd));
   if (json) {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } else if (quiet) {

@@ -73,22 +73,6 @@ matrix where no agent reviews its own output:
 npx guildless orchestrate --config guildless.orchestra.yml
 ```
 
-```text
-GUILDLESS ORCHESTRATION
-
-Objective: Implement the cross-review scheduler
-
-Planner       ✓
-Builders      3/3
-Reviews       6
-Fix round     0/2
-Breaker       ✓
-Verifier      PASS
-
-Verdict: ACCEPTED
-Evidence: .guildless/runs/20260802-123456-ab12/evidence.json
-```
-
 Workflow: a Planner breaks the objective into tasks → N Builders implement in
 parallel → each Builder's output is reviewed by the *other* reviewers (bug/requirements,
 security/permissions, test coverage), findings are aggregated into a consensus →
@@ -119,6 +103,110 @@ verification:
   max_fix_rounds: 2
 ```
 
+## GitHub work (Issue → PR)
+
+`guildless work` takes a GitHub issue, works on it in an isolated git worktree,
+runs the cross-review orchestration there, and — only when the machine verifier
+accepts — commits, pushes a branch, and opens a PR:
+
+```sh
+gh auth login                              # one-time
+npx guildless work --repo owner/repo --issue 12 --config guildless.work.yml --push
+```
+
+Isolation is fail-closed: it refuses to run when committed secret files (`.env`,
+`*.pem`, SSH keys, `.npmrc`, ...) are detected, never touches your main checkout
+or `main`, discards rejected work, and caps command runtime via
+`verification.command_timeout_ms`. Use `--dry-run` to orchestrate locally without
+pushing.
+
+Every run is appended to `.guildless/ledger.jsonl`; `guildless stats` aggregates
+the KPI ledger (runs, accepted, PRs created, human corrections, tokens, cost).
+
+```text
+GUILDLESS STATS
+
+Runs:              1
+Accepted:          1
+Rejected:          0
+PRs created:       0
+Human corrections: 0
+```
+
+## Batch validation (real GitHub issues)
+
+The proof pipeline finds real issues and runs them with zero human intervention:
+
+```sh
+npx guildless hunt --language both --limit 30   # find candidates (good first issue,
+                                                # help wanted, bug, enhancement, TS/Python,
+                                                # stars-sorted, difficulty classified)
+npx guildless batch --hunt .guildless/hunt-*.json --limit 5 --dry-run   # clone + orchestrate
+npx guildless stats --markdown                  # README-ready KPI table
+```
+
+`hunt` searches GitHub, fetches star counts, and classifies each issue as
+`easy` / `medium` / `hard` (heuristic). `batch` clones each easy repo, adapts the
+verification commands to the repo (npm/pytest scripts detected from
+`package.json` / Python project files), runs the full cross-review orchestration
+in an isolated worktree, and — only when ACCEPTED — can `--push` a branch and
+open a PR. Each result is saved before any PR as:
+
+```json
+{
+  "repository": "Hollujay/simutrace",
+  "issue": "10",
+  "accepted": true,
+  "human_interventions": 0,
+  "elapsed_seconds": 228.578,
+  "tokens": 53554,
+  "cost_usd": 0,
+  "tests_passed": true,
+  "build_passed": true,
+  "lint_passed": true
+}
+```
+
+`guildless stats --markdown` prints the KPI table: Runs / Accepted / Rejected /
+Human interventions / Merged PR / Average runtime / Average cost / Average tokens.
+
+## Real-time dashboard
+
+`guildless watch` renders a live terminal dashboard (Ink/React) while
+`guildless orchestrate`, `work`, or `batch` is running. The orchestrator streams
+progress to `.guildless/events.jsonl` (agent cards, stage status, progress bars,
+verify results); the dashboard tails that file and repaints in real time.
+
+```sh
+npx guildless orchestrate &        # or: work / batch, in another terminal
+npx guildless watch                # live dashboard: agents, bars, colors, KPI, verdict
+npx guildless watch --json         # machine-readable state snapshots
+npx guildless watch --once         # print one snapshot and exit (CI-friendly)
+```
+
+```text
+GUILDLESS WATCH  20260802-031133-e02f
+Objective: watch demo
+
+planner ✓   build ✓   review ✓   fix -   break -   verify ✓
+
+Agents:
+  ✓ planner        0 tokens
+  ✓ builder-1      0 tokens
+  ✓ reviewer-1-builder-2 0 tokens
+
+planner: 1/1   builders: 2/2   reviews: 2/2
+
+Verify:
+  ✓ npm test
+
+Human interventions: 0
+Runtime: 3m 12s
+Tokens: 53,554
+Cost: $0.0000
+Verdict: ACCEPTED
+```
+
 ## The five gates
 
 1. The Git working tree has no tracked or untracked changes.
@@ -128,6 +216,33 @@ verification:
 5. The unverified scope is explicitly declared. Use a truthful entry such as `"None known"` only when appropriate.
 
 Checks are deliberately fail-closed: a missing field, invalid commit, command error, timeout, network failure, or unexpected HTTP status rejects completion.
+
+## Design-deliverables gate
+
+To match how the market actually buys engineering work (requirements → design →
+implementation → release → operations), an optional `design` section turns the
+design documents themselves into machine-checked acceptance criteria:
+
+```yaml
+design:
+  documents:
+    - requirements.md
+    - architecture.md
+    - api-spec.yaml
+    - database-schema.md
+    - test-plan.md
+    - deployment.md
+    - rollback.md
+    - operations-runbook.md
+    - verification_scope.md
+  decisions_file: design-decisions.json
+```
+
+The gate verifies that every listed document exists and is non-empty, that
+`api-spec.*` is a valid OpenAPI document, and that the decisions file records
+each design decision with a `decision` and a `reason` (following the
+decision / alternatives / reason / risks / verification pattern). The same gate
+is available to the orchestrator as `verification.design_documents`.
 
 ## Agent and CI integration
 
