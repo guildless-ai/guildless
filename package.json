@@ -13,10 +13,10 @@
     "guildless.example.yml"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "check": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.persona.json",
+    "check": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.persona.json --noEmit",
     "test": "node --import tsx --test test/**/*.test.ts",
-    "lint": "eslint src test",
+    "lint": "eslint src test integrations",
     "prepublishOnly": "npm run check && npm test && npm run build"
   },
   "engines": {

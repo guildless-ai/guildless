@@ -15,6 +15,7 @@ import { orchestrateCommand } from "./orchestrator/command.js";
 import { batchCommand } from "./orchestrator/batch.js";
 import { huntCommand } from "./orchestrator/hunt.js";
 import { runCommand } from "./orchestrator/run.js";
+import { productCommand } from "./orchestrator/product.js";
 import { statsCommand, workCommand } from "./orchestrator/work.js";
 import { watchCommand } from "./orchestrator/watch.js";
 import { renderReport, type VerificationReport } from "./report.js";
@@ -28,7 +29,9 @@ function usage(): string {
     "  guildless batch --hunt <file> [--limit N] [--dry-run|--push] [--json]\n" +
     "  guildless stats [--json] [--markdown] [--check-merged]\n" +
     "  guildless watch [--file <path>] [--json] [--once] [--interval <ms>]\n" +
-    "  guildless verify [--config <path>] [--json] [--verbose] [--quiet]";
+    "  guildless verify [--config <path>] [--json] [--verbose] [--quiet]\n" +
+    "  guildless persona start|stop|status|replay <run-id> [--speed N] [--file <path>]\n" +
+    "  guildless product \"<goal>\" [--resume <run-id>] [--status <run-id>] [--replay <run-id>] [--critic <run-id>]";
 }
 
 async function defaultConfig(cwd: string): Promise<string> {
@@ -61,8 +64,21 @@ export async function main(argv = process.argv.slice(2), cwd = process.cwd()): P
   if (argv[0] === "watch") {
     return watchCommand(argv.slice(1), cwd);
   }
+  if (argv[0] === "product") {
+    return productCommand(argv.slice(1));
+  }
   if (argv[0] === "run") {
     return runCommand(argv.slice(1), cwd);
+  }
+  if (argv[0] === "persona") {
+    try {
+      const spec = "./persona/cli.js";
+      const { personaCommand } = await import(spec) as { personaCommand: (argv: string[], cwd: string) => Promise<number> };
+      return personaCommand(argv.slice(1), cwd);
+    } catch (error) {
+      console.error(`Persona integration unavailable: ${error instanceof Error ? error.message : String(error)}`);
+      return 1;
+    }
   }
   if (argv[0] !== "verify") {
     console.error(usage());
