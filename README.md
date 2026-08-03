@@ -6,6 +6,10 @@ A model-independent completion gate for coding agents. It checks commits, comman
 
 GUILDLESS does not ask another model whether the work is complete. It measures the repository and the deployed system, then returns a deterministic exit code that Claude Code, Codex, DeepSeek, OpenCode, CI, or a shell script can use.
 
+## Demo
+
+https://github.com/user-attachments/assets/3831da66-164d-4b65-9b74-c292d33574a7
+
 ## Quick start
 
 ```sh
