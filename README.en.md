@@ -28,11 +28,13 @@ The executive view shows what Guildless is researching, what it learned, the cur
 ## Included
 
 - `guildless verify`: deterministic checks for commits, commands, HTTP endpoints, and declared verification scope
-- `python/guildless_v0/core/`: evidence-backed Money Intelligence, Playbooks, and Money Bets
+- `python/guildless_v0/core/`: evidence-backed Money Intelligence, Money Playbook Compiler, Capability Graphs, and Money Bets
 - `capability-acquisition/`: discovery, verification, adapter proposals, and registration across Local, GitHub, public APIs, packages, models, MCP, and browser paths
 - `docs/`: Executive Operating View and runtime boundaries
 
 `public-apis/public-apis` is a discovery catalog, not an execution whitelist. Official documentation, liveness, authentication, pricing, commercial terms, rate limits, and a test request are required before registration.
+
+Playbooks compile into five-category Capability Graphs, compare automatically with the ready registry, and send gaps to the Autonomous Discovery Engine without asking the user to select a tool. Discovery count is not success; the final metric is evidenced `cash_confirmed`. See [`docs/money-playbook-compiler.md`](docs/money-playbook-compiler.md).
 
 ## Development
 

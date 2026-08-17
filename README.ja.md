@@ -35,11 +35,13 @@ Local → GitHub → public-apis → npm/PyPI → Hugging Face → MCP → Brows
 ## 主な構成
 
 - `guildless verify`：commit・コマンド・HTTP・検証範囲を機械的に確認する完了ゲート
-- `python/guildless_v0/core/`：証拠付き事例、Playbook、Money Bet、確認済み入金
+- `python/guildless_v0/core/`：証拠付き事例、Money Playbook Compiler、Capability Graph、Money Bet、確認済み入金
 - `capability-acquisition/`：既存能力・GitHub・public-apis・パッケージ・モデル・MCP・ブラウザの候補調達
 - `docs/`：Executive Operating Viewと安全境界
 
 public-apisは候補を探すための索引です。公式情報、稼働、認証、料金、商用条件、rate limit、実リクエストを確認するまで採用しません。
+
+Playbookは参考資料で終わりません。5カテゴリのCapability Graphへcompileし、既存Registryとの差分を自動計算し、不足能力をDiscovery Engineへ渡します。発見数ではなく、証拠付きの `cash_confirmed` が成功条件です。詳細は [`docs/money-playbook-compiler.md`](docs/money-playbook-compiler.md) を参照してください。
 
 ## 検証
 

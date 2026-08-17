@@ -183,6 +183,10 @@ class Playbook:
     confidence: float
     provenance: list[str] = field(default_factory=list)
     source_kind: str = "derived"
+    # Optional explicit capability contracts.  The compiler turns these into
+    # executable graph nodes; an empty mapping is populated conservatively by
+    # ``derive_playbook`` from the evidence-backed fields above.
+    capability_specs: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -212,6 +216,53 @@ def derive_playbook(cases: Sequence[MoneyCase], playbook_id: str, name: str | No
     skills = unique(skill for c in selected for skill in c.existing_skill)
     mechanisms = unique(c.pricing_model or "" for c in selected)
     mechanism = mechanisms[0] if len(mechanisms) == 1 else "evidence-backed offer and direct payment"
+    capability_specs = {
+        "strategy": [{
+            "capability_id": f"select_strategy:{playbook_id}",
+            "required": True,
+            "optional": False,
+            "preconditions": ["validated playbook evidence"],
+            "evidence_source": [f"case:{c.case_id}" for c in selected],
+            "success_metric": "strategy selected with an explicit rationale",
+            "fallback": ["keep the current strategy and run a bounded validation test"],
+        }],
+        "distribution": [{
+            "capability_id": f"distribution:{channel}",
+            "required": True,
+            "optional": False,
+            "preconditions": ["offer and buyer are known"],
+            "evidence_source": unique(url for c in selected for url in c.source_urls),
+            "success_metric": "qualified buyer signal or confirmed cash",
+            "fallback": ["manual founder-led outreach with approval"],
+        } for channel in channels],
+        "production": [{
+            "capability_id": f"production:{skill}",
+            "required": True,
+            "optional": False,
+            "preconditions": ["scope and acceptance criteria are explicit"],
+            "evidence_source": [f"case:{c.case_id}" for c in selected],
+            "success_metric": "accepted deliverable produced within the playbook constraint",
+            "fallback": ["reduce scope and deliver the manual path"],
+        } for skill in skills],
+        "monetization": [{
+            "capability_id": f"monetization:{mechanism}",
+            "required": True,
+            "optional": False,
+            "preconditions": ["buyer accepts the offer", "price is known"],
+            "evidence_source": [f"case:{c.case_id}" for c in selected],
+            "success_metric": "cash_confirmed with evidence",
+            "fallback": ["ask for a smaller paid pilot before scaling"],
+        }],
+        "operational": [{
+            "capability_id": "measure_outcome",
+            "required": True,
+            "optional": False,
+            "preconditions": ["money event schema is available"],
+            "evidence_source": [f"case:{c.case_id}" for c in selected],
+            "success_metric": "confirmed cash, cost, and time-to-cash recorded",
+            "fallback": ["stop and record an unresolved outcome"],
+        }],
+    }
     return Playbook(
         playbook_id=playbook_id,
         name=name or playbook_id,
@@ -228,6 +279,7 @@ def derive_playbook(cases: Sequence[MoneyCase], playbook_id: str, name: str | No
         supporting_cases=[c.case_id for c in selected],
         confidence=round(_clamp(confidence), 4),
         provenance=unique(url for c in selected for url in c.source_urls),
+        capability_specs=capability_specs,
     )
 
 
@@ -375,6 +427,7 @@ class MoneyBet:
     failure_reason: str | None = None
     success_reason: str | None = None
     status: str = "hypothesis"
+    outcome_metrics: dict[str, Any] = field(default_factory=dict)
     events: list[dict[str, Any]] = field(default_factory=list)
     created_at: str = field(default_factory=_now)
 
@@ -436,6 +489,7 @@ def money_outcome(bet: MoneyBet) -> dict[str, Any]:
         "contacts": bet.contacts,
         "contracts": bet.contracts,
         "status": bet.status,
+        "outcome_metrics": dict(bet.outcome_metrics),
         "is_money_success": bet.confirmed_cash_in > 0,
     }
 

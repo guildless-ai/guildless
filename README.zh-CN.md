@@ -28,11 +28,13 @@ Guildless 会在许可范围内恢复公司的资产、已验证能力、客户�
 ## 包含内容
 
 - `guildless verify`：对commit、命令、HTTP endpoint和验证范围进行确定性检查
-- `python/guildless_v0/core/`：带证据的 Money Intelligence、Playbook 和 Money Bet
+- `python/guildless_v0/core/`：带证据的 Money Intelligence、Money Playbook Compiler、Capability Graph 和 Money Bet
 - `capability-acquisition/`：跨 Local、GitHub、public APIs、包、模型、MCP 和浏览器路径发现并验证能力
 - `docs/`：Executive Operating View 和运行边界
 
 `public-apis/public-apis` 只是候选目录，不是执行白名单。注册前必须重新确认官方文档、可用性、认证、价格、商业使用、速率限制并完成测试请求。
+
+Playbook会被编译为五类 Capability Graph，与现有Registry自动比较，并把能力缺口交给 Autonomous Discovery Engine，而不是要求用户选择工具。发现了多少仓库不是成功指标；最终指标是有证据的 `cash_confirmed`。详见 [`docs/money-playbook-compiler.md`](docs/money-playbook-compiler.md)。
 
 ## 开发
 
