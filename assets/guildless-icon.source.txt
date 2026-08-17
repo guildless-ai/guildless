@@ -1,0 +1,6 @@
+Guildless canonical application icon.
+Source snapshot: existing high-resolution runtime asset
+`D:\Apps\Guildless\resources\guildless-runtime\_internal\frontend\dist\desktop-icon.png`.
+The same PNG is used for the UI favicon, sidebar mark, and tray image in the
+desktop build so the surfaces do not drift. `assets/guildless-tray.png` is a
+byte-identical copy for packaging and distribution.
