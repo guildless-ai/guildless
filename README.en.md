@@ -1,6 +1,6 @@
 # Guildless (English)
 
-![Guildless](assets/guildless-icon.png)
+![Guildless — Autonomous Outcome-Driven AI Company](assets/guildless-hero.png)
 
 Guildless is a local-first AI company operating system that closes the loop from business outcome to research, decision, execution, evidence, and verified cash.
 
