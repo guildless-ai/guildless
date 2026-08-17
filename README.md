@@ -1,6 +1,6 @@
 # Guildless
 
-![Guildless](assets/guildless-icon.png)
+![Guildless — Autonomous Outcome-Driven AI Company](assets/guildless-hero.png)
 
 **会社の目標を、調査・判断・実行・証拠・入金まで閉じるAI企業運営OS。**
 

@@ -1,6 +1,6 @@
 # Guildless（简体中文）
 
-![Guildless](assets/guildless-icon.png)
+![Guildless — 从目标到现金](assets/guildless-hero.png)
 
 Guildless 是一个本地优先的 AI 企业运营 OS，把企业目标连接到调研、决策、执行、证据和可验证收款。
 

@@ -1,6 +1,6 @@
 # Guildless（日本語）
 
-![Guildless](assets/guildless-icon.png)
+![Guildless — Outcomeから入金まで](assets/guildless-hero.png)
 
 Guildlessは、会社の目標を調査・判断・実行・証拠・入金まで閉じる、ローカル優先のAI企業運営OSです。
 
