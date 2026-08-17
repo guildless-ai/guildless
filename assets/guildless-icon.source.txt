@@ -1,6 +1,7 @@
 Guildless canonical application icon.
 Source snapshot: existing high-resolution runtime asset
-`D:\Apps\Guildless\resources\guildless-runtime\_internal\frontend\dist\desktop-icon.png`.
+Founder-provided Guildless mark (1254x1254 PNG), SHA-256:
+`A7F3194C575EA7177A9605D25E7513583CD9F109FFAC8C912D15D229AB688304`.
 The same PNG is used for the UI favicon, sidebar mark, and tray image in the
 desktop build so the surfaces do not drift. `assets/guildless-tray.png` is a
 byte-identical copy for packaging and distribution.
