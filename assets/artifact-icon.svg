@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">成果物</title>
+  <desc id="desc">検証済み成果物を表す箱とチェックマーク</desc>
+  <rect x="7" y="12" width="50" height="40" rx="10" fill="#123b31"/>
+  <path d="M8 25h48M20 12v13M44 12v13" fill="none" stroke="#d7efe3" stroke-width="3" stroke-linecap="round"/>
+  <path d="m21 38 7 7 15-16" fill="none" stroke="#f5c451" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -31,12 +31,15 @@ Verified money / outcome
 
 - `guildless verify`：commit、コマンド、HTTP、検証範囲を機械的に確認する決定論的な完了ゲート
 - `python/guildless_v0/core/`：証拠付きMoney Intelligence、Money Playbook Compiler、Capability Graph、Money Bet
+- `python/guildless_v0/core/artifacts.py`：成果物要件、品質ゲート、Asset Ledger
 - `capability-acquisition/`：Local / GitHub / public-apis / package / HF / MCP / Browser候補の発見・検証・登録
 - `docs/`：Executive Operating Viewと安全境界
 
 `public-apis/public-apis` は候補カタログであり、掲載されたAPIを自動実行しません。公式仕様、稼働、認証、料金、商用利用、rate limit、実リクエストを検証してから登録します。
 
 Money Playbook Compilerの詳細は [`docs/money-playbook-compiler.md`](docs/money-playbook-compiler.md) を参照してください。Capabilityの発見数ではなく、Playbookの `cash_confirmed` が最終成果です。
+
+成果物のDefinition of DoneとAsset Ledgerは [`docs/artifact-system.md`](docs/artifact-system.md) を参照してください。GitHub公開は全成果物の既定値ではなく、目的と成果物種別から配布先を選びます。
 
 ## 開発
 

@@ -11,6 +11,7 @@ The upstream verification CLI is preserved. The additions in this tree are sourc
 - `python/guildless_v0/core/` — evidence-backed Money Intelligence
 - `capability-acquisition/` — candidate discovery, verification, adapter proposal, and registry gate
 - `docs/` — Executive Operating View and runtime boundaries
-- `assets/guildless-icon.png` — the current desktop icon used by the installed runtime
+- `assets/guildless-icon.png` — the canonical high-resolution desktop icon used by the installed runtime
+- `assets/google-signin.png` — an unmodified Google-provided Sign-In icon used only in the account-link action; see `THIRD_PARTY_NOTICES.md`
 
-No GitHub push is performed by this local integration. Upstream updates must be reviewed and merged intentionally.
+Changes are pushed on feature branches and merged into `main` through reviewed pull requests.
