@@ -5,8 +5,11 @@ import unittest
 from guildless_v0.core.money_intelligence import CompanyState, MoneyBet, Playbook, money_outcome
 from guildless_v0.core.playbook_compiler import (
     AutonomousDiscoveryEngine,
+    DISCOVERY_SOURCE_ORDER,
     DiscoveryCandidate,
     JsonCapabilityRegistry,
+    VerificationHooks,
+    build_autonomous_discovery_engine,
     compile_playbook,
     compute_capability_gap,
     evaluate_candidate,
@@ -121,6 +124,30 @@ class TestPlaybookCompiler(unittest.TestCase):
         record_playbook_metric(bet, "videos_uploaded", 3)
         self.assertEqual(money_outcome(bet)["outcome_metrics"]["videos_uploaded"], 3)
         self.assertFalse(money_outcome(bet)["is_money_success"])
+
+    def test_discovery_composes_sources_in_fixed_order(self):
+        seen = []
+
+        def search(gap):
+            seen.append(gap.node_id)
+            return []
+
+        engine = build_autonomous_discovery_engine({source: search for source in reversed(DISCOVERY_SOURCE_ORDER)})
+        self.assertEqual([provider.name for provider in engine.providers], list(DISCOVERY_SOURCE_ORDER))
+        engine.discover(type("Gap", (), {"node_id": "generate_voice"})())
+        self.assertEqual(seen, ["generate_voice"] * len(DISCOVERY_SOURCE_ORDER))
+
+    def test_runtime_hooks_can_run_sandbox_and_benchmark_before_registration(self):
+        graph = compile_playbook(playbook(), {"production": [{"capability_id": "generate_voice", "evidence_source": ["case-youtube-1"], "success_metric": "voice rendered"}]})
+        source_candidate = candidate("generate_voice")
+        hooks = VerificationHooks(
+            sandbox_test=lambda item: True,
+            benchmark=lambda item: 0.95,
+            security_scan=lambda item: True,
+        )
+        result = procure_capability_gaps(graph, JsonCapabilityRegistry(), AutonomousDiscoveryEngine([FixtureProvider(source_candidate)]), verification_hooks=hooks)
+        self.assertTrue(result.ready)
+        self.assertEqual(result.evaluations["generate_voice"][0].candidate.benchmark_score, 0.95)
 
 
 if __name__ == "__main__":

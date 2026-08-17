@@ -25,6 +25,17 @@ from .money_intelligence import Playbook
 
 CATEGORIES = ("strategy", "distribution", "production", "monetization", "operational")
 UNIFIED_INTERFACE_VERSION = "guildless-capability-v1"
+DISCOVERY_SOURCE_ORDER = (
+    "local",
+    "installed_software",
+    "github",
+    "huggingface",
+    "mcp_registry",
+    "public_apis",
+    "npm",
+    "pypi",
+    "browser",
+)
 
 
 def _slug(value: Any) -> str:
@@ -357,6 +368,64 @@ class DiscoveryProvider(Protocol):
     def discover(self, gap: CapabilityGap) -> Iterable[DiscoveryCandidate]: ...
 
 
+@dataclass
+class CallbackDiscoveryProvider:
+    """Bridge a real source adapter into the deterministic discovery engine."""
+
+    name: str
+    searcher: Callable[[CapabilityGap], Iterable[DiscoveryCandidate]]
+
+    def discover(self, gap: CapabilityGap) -> Iterable[DiscoveryCandidate]:
+        return self.searcher(gap)
+
+
+def build_autonomous_discovery_engine(
+    searchers: Mapping[str, Callable[[CapabilityGap], Iterable[DiscoveryCandidate]]],
+) -> AutonomousDiscoveryEngine:
+    """Compose all available source adapters in a stable, non-interactive order.
+
+    Missing adapters are skipped; the engine never asks the user to install one.
+    Runtime code supplies the actual GitHub/HF/MCP/package/browser clients.
+    """
+
+    providers = [
+        CallbackDiscoveryProvider(source, searchers[source])
+        for source in DISCOVERY_SOURCE_ORDER
+        if source in searchers
+    ]
+    return AutonomousDiscoveryEngine(providers)
+
+
+@dataclass(frozen=True)
+class VerificationHooks:
+    """Optional clone, sandbox, benchmark, and security hooks for a candidate."""
+
+    clone: Callable[[DiscoveryCandidate], str | None] | None = None
+    sandbox_test: Callable[[DiscoveryCandidate], bool] | None = None
+    benchmark: Callable[[DiscoveryCandidate], float | None] | None = None
+    security_scan: Callable[[DiscoveryCandidate], bool] | None = None
+
+
+def verify_candidate_with_hooks(candidate: DiscoveryCandidate, hooks: VerificationHooks | None) -> DiscoveryCandidate:
+    """Run optional runtime checks without granting adoption permission."""
+
+    if hooks is None:
+        return candidate
+    clone_path = candidate.adapter_path
+    if candidate.clone_required and hooks.clone:
+        clone_path = hooks.clone(candidate) or clone_path
+    test_passed = candidate.test_passed
+    if hooks.sandbox_test:
+        test_passed = test_passed and bool(hooks.sandbox_test(candidate))
+    benchmark_score = candidate.benchmark_score
+    if hooks.benchmark:
+        benchmark_score = hooks.benchmark(candidate)
+    verified = candidate.verified
+    if hooks.security_scan and not hooks.security_scan(candidate):
+        verified = False
+    return replace(candidate, adapter_path=clone_path, test_passed=test_passed, benchmark_score=benchmark_score, verified=verified)
+
+
 class AutonomousDiscoveryEngine:
     """Provider composition layer; it never asks the user for a tool."""
 
@@ -433,6 +502,7 @@ def procure_capability_gaps(
     discovery: AutonomousDiscoveryEngine,
     *,
     adapter_builder: Callable[[DiscoveryCandidate], AdapterProposal] = generate_adapter_proposal,
+    verification_hooks: VerificationHooks | None = None,
 ) -> ProcurementResult:
     """Discover, verify, adapt, test, and register every missing capability."""
 
@@ -441,7 +511,8 @@ def procure_capability_gaps(
     registered: list[dict[str, Any]] = []
     unresolved: list[dict[str, Any]] = []
     for gap in gaps:
-        ranked = rank_candidates(discovery.discover(gap))
+        discovered = [verify_candidate_with_hooks(item, verification_hooks) for item in discovery.discover(gap)]
+        ranked = rank_candidates(discovered)
         evaluations[gap.node_id] = ranked
         selected = next((item for item in ranked if item.eligible), None)
         if selected is None:

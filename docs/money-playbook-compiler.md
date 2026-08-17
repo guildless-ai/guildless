@@ -46,6 +46,8 @@ browser-accessible services
 
 `DiscoveryCandidate` evaluates license, commercial use, maintenance, platform compatibility, cost, quality, runtime, security, integration difficulty, evidence, and tests. Unknown license/commercial use or failed sandbox/adapter tests are rejected. A candidate is registered only when all gates pass.
 
+`build_autonomous_discovery_engine` composes the available source adapters in a fixed order (local, installed software, GitHub, Hugging Face, MCP Registry, public APIs, npm, PyPI, browser). Runtime adapters perform the source-specific search. `VerificationHooks` provides optional clone, sandbox test, benchmark, and security-scan hooks; failures are recorded and prevent registration rather than prompting the user.
+
 If the candidate does not implement `guildless-capability-v1`, `generate_adapter_proposal` produces the adapter, test, and workflow paths for the Codex adapter-generation step. The proposal is not an execution permission and does not write secrets.
 
 ## Money outcome
