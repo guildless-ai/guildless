@@ -1,7 +1,7 @@
 {
   "name": "guildless",
   "version": "0.1.0",
-  "description": "A model-independent completion gate for coding agents.",
+  "description": "Evidence-gated AI company operating system with a deterministic completion gate.",
   "type": "module",
   "bin": {
     "guildless": "dist/cli.js"
@@ -24,6 +24,9 @@
   },
   "keywords": [
     "ai-agents",
+    "company-operating-system",
+    "money-intelligence",
+    "capability-acquisition",
     "verification",
     "cli",
     "ci",
@@ -32,12 +35,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kokoaru-ltd/guildless-verify.git"
+    "url": "git+https://github.com/guildless-ai/guildless.git"
   },
   "bugs": {
-    "url": "https://github.com/kokoaru-ltd/guildless-verify/issues"
+    "url": "https://github.com/guildless-ai/guildless/issues"
   },
-  "homepage": "https://github.com/kokoaru-ltd/guildless-verify#readme",
+  "homepage": "https://github.com/guildless-ai/guildless#readme",
   "dependencies": {
     "yaml": "^2.8.1"
   },
