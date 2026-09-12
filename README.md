@@ -1,304 +1,68 @@
-# GUILDLESS
+# Guildless
 
-AI agents say “done.” GUILDLESS asks for proof.
+![Guildless — Autonomous Outcome-Driven AI Company](assets/guildless-hero.png)
 
-A model-independent completion gate for coding agents. It checks commits, commands, URLs, tests and declared verification scope before accepting completion.
+**会社の目標を、調査・判断・実行・証拠・入金まで閉じるAI企業運営OS。**
 
-GUILDLESS does not ask another model whether the work is complete. It measures the repository and the deployed system, then returns a deterministic exit code that Claude Code, Codex, DeepSeek, OpenCode, CI, or a shell script can use.
+Guildlessは、モデル名やAgentの数を経営者に選ばせません。ユーザーは「この会社を伸ばして。まず月商を100万円増やして」のようなOutcomeを一つ入力します。Guildlessは会社を調べ、販売可能な資産と能力を確認し、市場・成功事例・失敗事例・競合を比較し、最短の現金化案を選び、許可された範囲で実行し、実入金を証拠付きで記録します。
 
-## Quick start
+## 言語 / Languages / 语言
 
-```sh
-npx guildless verify --config guildless.yml
-```
+- [日本語](README.ja.md)
+- [English](README.en.md)
+- [简体中文](README.zh-CN.md)
 
-Create `guildless.yml`:
-
-```yaml
-testedCommit: "4d2c5b8..." # exact commit SHA that was tested
-
-commands:
-  - "npm test"
-
-urls:
-  - url: "https://example.com/health"
-    status: 200
-
-unverifiedScope:
-  - "Visual regression was not checked on Safari"
-```
-
-The command exits with `0` only when all five gates pass. A rejected claim exits with `1`; invalid CLI usage exits with `2`.
-
-The default (concise) output hides per-check details and shows PASS/FAIL, a
-summary, the next recommended action, and where full evidence was saved:
+## 製品ループ
 
 ```text
-GUILDLESS: REJECTED
-
-✗ git-clean: 2 uncommitted changes
-✗ commit-match: Tested commit differs from current HEAD
-✗ http: URL returned 404 (expected 200)
-
-Next:
-  • Commit or stash the uncommitted changes, then re-run
-  • Commit the tested work, or update testedCommit in guildless.yml to match HEAD
-  Re-run: guildless verify
-
-Evidence: .guildless/runs/20260802-123456-ab12/evidence.json
+Outcome
+  ↓ 会社理解（事実 + 根拠）
+Capability gap
+  ↓ Local → GitHub → public-apis → npm/PyPI → Hugging Face → MCP → Browser/Web
+Strategy options → Money Bet
+  ↓ 承認された範囲で実行
+Verified money / outcome
+  ↓ 次の判断へ学習
 ```
 
-## CLI options
+経営画面には、今調べていること、分かったこと、現在の判断、次にすること、人間が必要なこと、確認済みの入金を表示します。モデル名・Agent名・tool call・内部ログは開発者向け診断に隔離します。
 
-| Option       | Effect                                                                 |
-|--------------|------------------------------------------------------------------------|
-| (default)    | Concise output: PASS/FAIL, summary, next action, evidence path          |
-| `--verbose`  | Shows each check's detail: changed file list, command output, HTTP details |
-| `--json`     | Prints the complete report as JSON to stdout (nothing else) and exit 0/1/2 |
-| `--quiet`    | No output on success (exit 0); one-line failure reason on error (exit 1) |
-| `--config`   | Path to `guildless.yml` (default: auto-detected in the current directory) |
-| `--help`     | Show usage                                                              |
+## 含まれるもの
 
-Every run saves full evidence to `.guildless/runs/<run-id>/evidence.json`
-(contract, checks, details). The `.guildless` directory is ignored by the
-git-clean gate so saved evidence never fails a later run.
+- `guildless verify`：commit、コマンド、HTTP、検証範囲を機械的に確認する決定論的な完了ゲート
+- `python/guildless_v0/core/`：証拠付きMoney Intelligence、Money Playbook Compiler、Capability Graph、Money Bet
+- `python/guildless_v0/core/artifacts.py`：成果物要件、品質ゲート、Asset Ledger
+- `capability-acquisition/`：Local / GitHub / public-apis / package / HF / MCP / Browser候補の発見・検証・登録
+- `docs/`：Executive Operating Viewと安全境界
 
-## Cross-review orchestration
+`public-apis/public-apis` は候補カタログであり、掲載されたAPIを自動実行しません。公式仕様、稼働、認証、料金、商用利用、rate limit、実リクエストを検証してから登録します。
 
-`guildless orchestrate` is the multi-agent scheduling layer. It turns the
-serial "one agent does the work, one agent checks it" flow into a parallel
-matrix where no agent reviews its own output:
+Money Playbook Compilerの詳細は [`docs/money-playbook-compiler.md`](docs/money-playbook-compiler.md) を参照してください。Capabilityの発見数ではなく、Playbookの `cash_confirmed` が最終成果です。
 
-```sh
-npx guildless orchestrate --config guildless.orchestra.yml
-```
+成果物のDefinition of DoneとAsset Ledgerは [`docs/artifact-system.md`](docs/artifact-system.md) を参照してください。GitHub公開は全成果物の既定値ではなく、目的と成果物種別から配布先を選びます。
 
-Workflow: a Planner breaks the objective into tasks → N Builders implement in
-parallel → each Builder's output is reviewed by the *other* reviewers (bug/requirements,
-security/permissions, test coverage), findings are aggregated into a consensus →
-Fixers resolve findings (bounded by `max_fix_rounds`) → a Breaker adds counterexample
-tests → the machine Verifier runs the configured commands (`npm run build`, `npm test`,
-`npm run lint`, `git diff --check`, HTTP checks) and returns the final verdict.
-Agent wall-climbing output is never shown — only stage status.
+CLI（`verify` / `orchestrate` / `work` / `batch` / `watch`）の詳細は [`docs/cli-reference.md`](docs/cli-reference.md) を参照してください。
 
-Agents are subprocesses speaking a JSON protocol (`--input`/`--output` files).
-The package ships demo agents; point `agent_commands` at real LLM CLIs to use
-actual models:
-
-```yaml
-agents:
-  planner: 1
-  builders: 3
-  reviewers: 3
-  breakers: 1
-  fixers: 2
-
-review_policy:
-  self_review: false          # nobody reviews their own work
-  cross_review: true
-  minimum_reviews_per_task: 2
-
-verification:
-  commands: [npm run build, npm test, npm run lint]
-  max_fix_rounds: 2
-```
-
-## GitHub work (Issue → PR)
-
-`guildless work` takes a GitHub issue, works on it in an isolated git worktree,
-runs the cross-review orchestration there, and — only when the machine verifier
-accepts — commits, pushes a branch, and opens a PR:
-
-```sh
-gh auth login                              # one-time
-npx guildless work --repo owner/repo --issue 12 --config guildless.work.yml --push
-```
-
-Isolation is fail-closed: it refuses to run when committed secret files (`.env`,
-`*.pem`, SSH keys, `.npmrc`, ...) are detected, never touches your main checkout
-or `main`, discards rejected work, and caps command runtime via
-`verification.command_timeout_ms`. Use `--dry-run` to orchestrate locally without
-pushing.
-
-Every run is appended to `.guildless/ledger.jsonl`; `guildless stats` aggregates
-the KPI ledger (runs, accepted, PRs created, human corrections, tokens, cost).
-
-```text
-GUILDLESS STATS
-
-Runs:              1
-Accepted:          1
-Rejected:          0
-PRs created:       0
-Human corrections: 0
-```
-
-## Batch validation (real GitHub issues)
-
-The proof pipeline finds real issues and runs them with zero human intervention:
-
-```sh
-npx guildless hunt --language both --limit 30   # find candidates (good first issue,
-                                                # help wanted, bug, enhancement, TS/Python,
-                                                # stars-sorted, difficulty classified)
-npx guildless batch --hunt .guildless/hunt-*.json --limit 5 --dry-run   # clone + orchestrate
-npx guildless stats --markdown                  # README-ready KPI table
-```
-
-`hunt` searches GitHub, fetches star counts, and classifies each issue as
-`easy` / `medium` / `hard` (heuristic). `batch` clones each easy repo, adapts the
-verification commands to the repo (npm/pytest scripts detected from
-`package.json` / Python project files), runs the full cross-review orchestration
-in an isolated worktree, and — only when ACCEPTED — can `--push` a branch and
-open a PR. Each result is saved before any PR as:
-
-```json
-{
-  "repository": "Hollujay/simutrace",
-  "issue": "10",
-  "accepted": true,
-  "human_interventions": 0,
-  "elapsed_seconds": 228.578,
-  "tokens": 53554,
-  "cost_usd": 0,
-  "tests_passed": true,
-  "build_passed": true,
-  "lint_passed": true
-}
-```
-
-`guildless stats --markdown` prints the KPI table: Runs / Accepted / Rejected /
-Human interventions / Merged PR / Average runtime / Average cost / Average tokens.
-
-## Real-time dashboard
-
-`guildless watch` renders a live terminal dashboard (Ink/React) while
-`guildless orchestrate`, `work`, or `batch` is running. The orchestrator streams
-progress to `.guildless/events.jsonl` (agent cards, stage status, progress bars,
-verify results); the dashboard tails that file and repaints in real time.
-
-```sh
-npx guildless orchestrate &        # or: work / batch, in another terminal
-npx guildless watch                # live dashboard: agents, bars, colors, KPI, verdict
-npx guildless watch --json         # machine-readable state snapshots
-npx guildless watch --once         # print one snapshot and exit (CI-friendly)
-```
-
-```text
-GUILDLESS WATCH  20260802-031133-e02f
-Objective: watch demo
-
-planner ✓   build ✓   review ✓   fix -   break -   verify ✓
-
-Agents:
-  ✓ planner        0 tokens
-  ✓ builder-1      0 tokens
-  ✓ reviewer-1-builder-2 0 tokens
-
-planner: 1/1   builders: 2/2   reviews: 2/2
-
-Verify:
-  ✓ npm test
-
-Human interventions: 0
-Runtime: 3m 12s
-Tokens: 53,554
-Cost: $0.0000
-Verdict: ACCEPTED
-```
-
-## The five gates
-
-1. The Git working tree has no tracked or untracked changes.
-2. `testedCommit` resolves to the same commit as the submitted `HEAD`.
-3. Every configured command exits successfully.
-4. Every configured URL returns its expected HTTP status.
-5. The unverified scope is explicitly declared. Use a truthful entry such as `"None known"` only when appropriate.
-
-Checks are deliberately fail-closed: a missing field, invalid commit, command error, timeout, network failure, or unexpected HTTP status rejects completion.
-
-## Design-deliverables gate
-
-To match how the market actually buys engineering work (requirements → design →
-implementation → release → operations), an optional `design` section turns the
-design documents themselves into machine-checked acceptance criteria:
-
-```yaml
-design:
-  documents:
-    - requirements.md
-    - architecture.md
-    - api-spec.yaml
-    - database-schema.md
-    - test-plan.md
-    - deployment.md
-    - rollback.md
-    - operations-runbook.md
-    - verification_scope.md
-  decisions_file: design-decisions.json
-```
-
-The gate verifies that every listed document exists and is non-empty, that
-`api-spec.*` is a valid OpenAPI document, and that the decisions file records
-each design decision with a `decision` and a `reason` (following the
-decision / alternatives / reason / risks / verification pattern). The same gate
-is available to the orchestrator as `verification.design_documents`.
-
-## Agent and CI integration
-
-Tell any coding agent to run this after it claims completion:
-
-```text
-Run `npx guildless verify`. Do not report completion unless it exits 0.
-```
-
-For machine-readable output:
-
-```sh
-npx guildless verify --json
-```
-
-In GitHub Actions:
-
-```yaml
-- name: Verify completion evidence
-  run: npx guildless verify --config guildless.yml
-```
-
-The repository includes `.github/ci.example.yml`; copy it to `.github/workflows/ci.yml` to enable the project CI workflow.
-
-Pin a released version in production workflows for reproducibility.
-
-## Why not model voting?
-
-DeepSeek can be an inexpensive implementer and a separate-context critic, while Codex or Claude handles difficult review. But one hundred agents can share one false assumption. GUILDLESS makes shell commands, Git, HTTP, tests, and other external measurements the final authority.
-
-## Scope
-
-This first release is intentionally small: one repository, one local contract, and five basic gates. It is not the larger GUILDLESS agent-orchestration product.
-
-Potential future paid infrastructure—only if the CLI is genuinely used—includes isolated multi-project execution, organization policies, retained audit evidence, integrations, permissions and budgets, rollback, private networking, and an operations dashboard.
-
-## Seven-day validation
-
-After publishing, the project should expand only if real usage appears:
-
-- 10 people install it.
-- 3 run it in their own repositories.
-- It catches at least 1 false completion or verification gap.
-- At least 1 person opens an issue or improvement request.
-
-If those signals are all zero, improve distribution or revisit demand instead of making the product larger.
-
-## Development
+## 開発
 
 ```sh
 npm install
 npm run check
 npm test
 npm run build
+npm run lint
+python python/run_tests.py
+node capability-acquisition/test_acquisition.js
 ```
 
-## License
+## 安全境界
 
-MIT
+- 外部送信、契約、決済、公開、削除は承認前に実行しない
+- Founder Memory Raw DBとHistorical Benchmark DBへ直接接続しない
+- 事実と推論を分離し、事実には根拠を付ける
+- 候補発見と採用を分離し、未検証のOSS/APIを実行しない
+- 実入金だけを確認済み売上として数える
+
+## ライセンス
+
+MIT License。追加した外部由来コードは各LICENSE/NOTICEと取得コミットを記録します。

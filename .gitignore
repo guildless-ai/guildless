@@ -6,3 +6,5 @@ coverage/
 .DS_Store
 /work/
 /outputs/
+__pycache__/
+*.pyc
