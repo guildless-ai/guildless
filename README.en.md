@@ -30,6 +30,7 @@ The executive view shows what Guildless is researching, what it learned, the cur
 - `guildless verify`: deterministic checks for commits, commands, HTTP endpoints, and declared verification scope
 - `python/guildless_v0/core/`: evidence-backed Money Intelligence, Money Playbook Compiler, Capability Graphs, and Money Bets
 - `python/guildless_v0/core/artifacts.py`: artifact requirements, quality gates, and the Asset Ledger
+- `python/guildless_v0/core/supabase_ledger.py`: evidenced `cash_confirmed` events and a funnel/health snapshot read from read-only views on the existing Supabase operating database ([`docs/supabase-ledger.md`](docs/supabase-ledger.md))
 - `capability-acquisition/`: discovery, verification, adapter proposals, and registration across Local, GitHub, public APIs, packages, models, MCP, and browser paths
 - `docs/`: Executive Operating View and runtime boundaries
 

@@ -37,6 +37,7 @@ Local → GitHub → public-apis → npm/PyPI → Hugging Face → MCP → Brows
 - `guildless verify`：commit・コマンド・HTTP・検証範囲を機械的に確認する完了ゲート
 - `python/guildless_v0/core/`：証拠付き事例、Money Playbook Compiler、Capability Graph、Money Bet、確認済み入金
 - `python/guildless_v0/core/artifacts.py`：成果物要件、品質ゲート、Asset Ledger
+- `python/guildless_v0/core/supabase_ledger.py`：既存Supabase運用DBの読み取り専用ビューから、証拠付き`cash_confirmed`とファネル/健全性スナップショットを取得（[`docs/supabase-ledger.md`](docs/supabase-ledger.md)）
 - `capability-acquisition/`：既存能力・GitHub・public-apis・パッケージ・モデル・MCP・ブラウザの候補調達
 - `docs/`：Executive Operating Viewと安全境界
 
