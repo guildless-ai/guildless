@@ -62,3 +62,12 @@
 - 実行: campaign `oncall_light_reception_leads_2026_09_12` → apotrail `4cef694d-4ef8-4a7f-9829-ed2a49eb146b`、Indeed 受付募集企業の固定/0120 番号 40件、9〜18 JST、running。メール `oncall_light_email_2026_09` 5通送信（公開採用アドレス、法3条1項3号）。
 - Stripe: 新規決済なし（最終 2026-05-28）。
 - 次の反復: 40件の通話結果（`call_campaign_contacts.call_result`、`call_logs.gate_result/dm_result`）、メール返信、決済。接続率が0なら台本/時間帯を変える。
+
+## /loop 反復3（2026-09-12 08:50 UTC）
+
+**質問への事実回答**
+- メール営業: 実施済み 25通（デモ申込6、登録者12、元顧客2、公開採用アドレス5）。全件 Resend 受理。返信は reply@oncall.jp / admin@kokoaru.jp に届くため、この環境からは未確認。
+- フォーム営業: 未実施。リードにフォームURLが無く、既存の `incagent-cdp` は Cloudflare Browser Rendering でフォーム構造を探索するだけで送信機能が無い。
+- アポトレール LP の折り返し通話: 2026-09-11 11:58 UTC 以降の3件は `model_used = gpt-live-1`（voice ash）。それ以前（8/29〜9/10）は `grok-voice-think-fast-2.0`。つまり GPT live への切替は 9/11 に行われている（`call_logs.model_used` で確認）。
+
+**架電の途中結果（40社中19社完了）**: 0120/0100 番号13件は全件0秒不通（発信回線から着信課金番号へ繋がらない）。03番号は2件接続（1件は診療時間外案内、1件は6秒で切断）、3件0秒不通。学習は `own-call-reception-leads-2026-09-12` に記録。対策: 着信課金番号を架電対象から除外（関数側でフィルタ）。
