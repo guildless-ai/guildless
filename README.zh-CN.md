@@ -30,6 +30,7 @@ Guildless 会在许可范围内恢复公司的资产、已验证能力、客户�
 - `guildless verify`：对commit、命令、HTTP endpoint和验证范围进行确定性检查
 - `python/guildless_v0/core/`：带证据的 Money Intelligence、Money Playbook Compiler、Capability Graph 和 Money Bet
 - `python/guildless_v0/core/artifacts.py`：成果物要求、质量门禁和 Asset Ledger
+- `python/guildless_v0/core/supabase_ledger.py`：从现有 Supabase 运营数据库的只读视图读取带证据的 `cash_confirmed` 事件与漏斗/健康快照（[`docs/supabase-ledger.md`](docs/supabase-ledger.md)）
 - `capability-acquisition/`：跨 Local、GitHub、public APIs、包、模型、MCP 和浏览器路径发现并验证能力
 - `docs/`：Executive Operating View 和运行边界
 
