@@ -54,3 +54,11 @@
 - 実行: campaign `spot_call_demo_requesters_2026_09_12` → apotrail campaign `20e16939-ab1b-4b40-b10c-940d2a56dd7f`、デモ申込者5件、status running、発信時間 9〜19 JST。
 - 費用: 直近60日の発信は接続1件あたり約 $0.15〜0.17（`call_logs.provider_cost_usd`）。上限10万円に対し無視できる。
 - 次の反復: `call_campaign_contacts.call_result` と `call_logs` で結果確認。Stripe 決済確認。Indeed 受付募集39社（電話確認済）は受電向けオファー（ONCALL ライト 29,800円/月の既存価格）で別キャンペーンを検討。
+
+## /loop 反復2（2026-09-12 08:35 UTC）
+
+- 反復1の結果: デモ申込者5件（携帯）は全件不通・留守電。留守電ループ3件が各271秒・約$1.06。合計約$3.46。学習は `guildless_money_cases` の `own-call-demo-requesters-2026-09-12` に記録。改善: 留守電/IVRは30秒以内に切る指示を台本へ追加、固定電話・平日日中を優先。
+- 2本目のオファーを起動: AI受電（既存 Stripe 価格 ONCALL ライトプラン 29,800円/月）。Payment Link https://buy.stripe.com/aFabJ0fRgder1uxgeu8AE08。納品は手動（専用番号払い出し）。
+- 実行: campaign `oncall_light_reception_leads_2026_09_12` → apotrail `4cef694d-4ef8-4a7f-9829-ed2a49eb146b`、Indeed 受付募集企業の固定/0120 番号 40件、9〜18 JST、running。メール `oncall_light_email_2026_09` 5通送信（公開採用アドレス、法3条1項3号）。
+- Stripe: 新規決済なし（最終 2026-05-28）。
+- 次の反復: 40件の通話結果（`call_campaign_contacts.call_result`、`call_logs.gate_result/dm_result`）、メール返信、決済。接続率が0なら台本/時間帯を変える。
