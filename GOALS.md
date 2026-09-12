@@ -46,3 +46,11 @@
 - 再現性優先か信用構築かは AI が選ぶ。
 - 初期投資上限 10 万円（API 料金・広告費を含む）。無料でできること（動画投稿、X 投稿、アカウント作成）は自由に行ってよい。
 - UGC 動画納品など企業から対価を得る手段も対象。法人（合同会社ココアル）として動く。
+
+## /loop 反復1（2026-09-12 07:47 UTC）
+
+- 架電チャネルを起動。Edge Function `guildless-call-campaign`（incagent-os）を新設。apotrail の `/api/campaigns` + `/auto-start` を使い、全件を `guildless_outreach_log`（channel=call）に記録。
+- 判明した仕様: CSV 列名は ASCII（`TEL`）でないと電話列が検出されない。`/auto-start` は `confirm_test_calls=YES` を要求する（apotrail 自身の確認ゲート。所有者の明示委任に基づき AI が確認を付与）。
+- 実行: campaign `spot_call_demo_requesters_2026_09_12` → apotrail campaign `20e16939-ab1b-4b40-b10c-940d2a56dd7f`、デモ申込者5件、status running、発信時間 9〜19 JST。
+- 費用: 直近60日の発信は接続1件あたり約 $0.15〜0.17（`call_logs.provider_cost_usd`）。上限10万円に対し無視できる。
+- 次の反復: `call_campaign_contacts.call_result` と `call_logs` で結果確認。Stripe 決済確認。Indeed 受付募集39社（電話確認済）は受電向けオファー（ONCALL ライト 29,800円/月の既存価格）で別キャンペーンを検討。
