@@ -25,3 +25,16 @@
 - 1 通の DM や 1 経路の不通を「事業全体の許可不足」にしない。
 - 有償買い手の証拠がない商材へ「作りやすいから」で逃げない。
 - リード・返信・商談・契約を売上に数えない。`cash_confirmed` だけが売上。
+
+## 現在の判断と実行状態（2026-09-12 07:15 UTC）
+
+**判断（AI壁打ち A/B → 裁定）**: 売るのはアポトレール（B2B）。初回現金は前払い単発「AI一次架電スポット（100件）29,800円」で取り、継続はクレジット追加/liteプランへ。根拠は Stripe 実績（有料2社・計298,800円・両社6月までに解約）、トライアル14件が未転換、デモ申込12件中8件が営業代行・テレアポ業種。UGC量産・EXE壁打ち製品は買い手証拠ゼロで不採用。
+
+**作ったもの（すべて既存基盤上、コード追加は送信関数1本）**
+- Stripe: product `prod_VFCu2qK9csPRqJ` / price `price_1UEiUrCvZa5rB1U59o0rzQub` / Payment Link https://buy.stripe.com/6oUdR86gGcan7SV8M28AE07
+- Supabase incagent-os: Edge Function `guildless-outreach`（Resend 送信・`guildless_outreach_log` に全件記録・同一キャンペーン同一宛先は再送しない）
+- 送信済み: `spot_call_100_2026_09` 18通（デモ申込6・登録者12）、`winback_2026_09` 2通（元有料顧客）。全件 Resend 受理。
+
+**計測とキル基準**: Stripe `charge.succeeded`（Payment Link 経由）→ freee 同期 → `guildless_cash_events`。2026-09-26 までに決済0件かつ返信0件なら本オファーを停止し、次は電話チャネル（demo申込の電話のみ5件・Indeed電話確認済み39社）へ切替。返信先は `REPLY_TO`（reply@oncall.jp）と admin@kokoaru.jp。
+
+**未実行**: AI架電チャネル（apotrail の発信トリガー方式が未確認）、Lancers 認証情報、`incagent-apply` の失敗記録。
