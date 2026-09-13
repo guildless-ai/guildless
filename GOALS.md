@@ -85,3 +85,12 @@
 - さらに、09-12 10:08 UTC と 09-13 00:47 UTC の LP テスト（同一番号）は `public_test_calls.status='initiated'` のまま `call_logs` 行が無い（通話が記録されずに終わっている）。
 - 対処: コードは `kokoaru-ltd/apotrail-alpha`（このセッションには別オーナーのため添付不可）。修正用セッション `session_0176U2Uv2v8GNB3byttWyXgK` を起動し、原因特定→ブランチ `fix/lp-demo-unresponsive-fallback` → ドラフト PR を指示。結果は本ファイルに追記する。
 - ルール追加: **通話品質（応答遅延・無応答ループ）の欠陥は営業活動より優先して直す。デモ通話で「同一発話の反復」が検出されたら、その日の新規架電を止めて修正する。**
+
+### LP 折り返しデモ修正の結果（2026-09-13 01:36 UTC）
+
+- PR: https://github.com/kokoaru-ltd/apotrail-alpha/pull/6（ドラフト、ブランチ `fix/lp-demo-unresponsive-fallback`）。master マージで Railway に自動デプロイ。未マージ（実通話での検証がこの環境から不可能なため、AI はマージしていない）。
+- 原因1（反復）: `lib/gpt-live-bridge.js` の無音監視 `_armInaudiblePrompt()` が「文字起こしが無い」ことだけで無音と判定し、AI 発話停止5秒で「お声が遠い」を指示。`_clearInaudiblePrompt({reset:true})` が相手の発話ごとに回数を 0 に戻すため無限反復。master f8041dd は LP だけタイマーを全停止しており、本当の無音でも声かけ・終話なし。
+- 原因2（記録欠落）: `server.js` `handleCallEnded` が LP の一時 ID `test_…` を uuid 列 `campaign_id` に入れて insert 失敗→フォールバックで `twilio_call_sid`/`provider` が落ちる。`initiated` 残留は `/api/twilio-status` が activeCalls 不在時に `public_test_calls` を更新せず、`handleCallEnded` が `.catch` 無しで呼ばれていたため。
+- 修正: 無音判定を Twilio 入力の実音声 RMS（閾値 `GPT_LIVE_USER_AUDIO_MIN_RMS=500`）＋文字起こしで行い、聞こえている相手には言わない。1通話1回、2回目は「改めてご連絡いたします」で終話（LP も対象）。`campaign_id` は uuid のみ。twilio-status の孤立経路で `public_test_calls` を completed にし最小 `call_logs` 行を残す。`.catch` を4か所に追加。
+- 検証: gpt-live テスト 36/36、全体 425/427（残2件は master でも失敗する datetime-parser 系）。未検証: 実通話、RMS 閾値の実回線適合、既存 `initiated` 行（CA78ebcf, CAb4ad63）は未更新。
+- 記録: `guildless_money_cases` `apotrail-lp-demo-fallback-fix-2026-09-13`（outcome=mixed）。
