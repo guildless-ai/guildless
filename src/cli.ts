@@ -15,6 +15,7 @@ import { orchestrateCommand } from "./orchestrator/command.js";
 import { batchCommand } from "./orchestrator/batch.js";
 import { huntCommand } from "./orchestrator/hunt.js";
 import { runCommand } from "./orchestrator/run.js";
+import { moneyCommand } from "./orchestrator/money.js";
 import { productCommand } from "./orchestrator/product.js";
 import { statsCommand, workCommand } from "./orchestrator/work.js";
 import { watchCommand } from "./orchestrator/watch.js";
@@ -26,6 +27,7 @@ function usage(): string {
     "  guildless orchestrate [--config <path>] [--json] [--quiet]\n" +
     "  guildless work --repo <owner/repo> --issue <number> [--config <path>] [--push] [--dry-run] [--json] [--quiet]\n" +
     "  guildless hunt [--language ts|python|both] [--limit N] [--json]\n" +
+    "  guildless money status|leads|outreach [--json] [--missing-route] [--send]\n" +
     "  guildless batch --hunt <file> [--limit N] [--dry-run|--push] [--json]\n" +
     "  guildless stats [--json] [--markdown] [--check-merged]\n" +
     "  guildless watch [--file <path>] [--json] [--once] [--interval <ms>]\n" +
@@ -57,6 +59,9 @@ export async function main(argv = process.argv.slice(2), cwd = process.cwd()): P
   }
   if (argv[0] === "hunt") {
     return huntCommand(argv.slice(1), cwd);
+  }
+  if (argv[0] === "money") {
+    return moneyCommand(argv.slice(1), cwd);
   }
   if (argv[0] === "batch") {
     return batchCommand(argv.slice(1), cwd);
