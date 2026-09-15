@@ -12,9 +12,15 @@ export interface AgentRequest {
   toolDir: string;
   timeoutMs: number;
   input: unknown;
+  runId?: string;
 }
 
-function run(command: string, cwd: string, timeoutMs: number): Promise<{ code: number | null; output: string }> {
+interface RunResult {
+  code: number | null;
+  output: string;
+}
+
+function run(command: string, cwd: string, timeoutMs: number): Promise<RunResult> {
   return new Promise((resolve) => {
     const child = spawn(command, { cwd, shell: true, env: process.env });
     let output = "";
@@ -26,20 +32,64 @@ function run(command: string, cwd: string, timeoutMs: number): Promise<{ code: n
   });
 }
 
+function runPipe(command: string, cwd: string, inputJson: string, timeoutMs: number): Promise<RunResult> {
+  return new Promise((resolve) => {
+    const child = spawn(command, { cwd, shell: true, env: process.env, stdio: ["pipe", "pipe", "pipe"] });
+    let output = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk: string) => { output += chunk; });
+    child.stderr.on("data", (chunk: string) => { stderr += chunk; });
+    const timer = setTimeout(() => { child.kill(); }, timeoutMs);
+    child.on("error", (error) => { clearTimeout(timer); resolve({ code: null, output: String(error) }); });
+    child.on("close", (code) => { clearTimeout(timer); resolve({ code, output: `${output.trim()}${stderr.trim() ? `\n${stderr.trim()}` : ""}` }); });
+    child.stdin.on("error", () => { /* stdin closed early */ });
+    child.stdin.write(inputJson);
+    child.stdin.end();
+  });
+}
+
+function parseAgentOutput(raw: string, role: AgentRole, id: string): Record<string, unknown> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(`agent ${role}/${id} produced invalid JSON output`);
+  }
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error(`agent ${role}/${id} produced a non-object output`);
+  }
+  return parsed as Record<string, unknown>;
+}
+
 export async function runAgent(request: AgentRequest): Promise<Record<string, unknown>> {
+  const command = request.command
+    .replaceAll("{workdir}", request.workdir)
+    .replaceAll("{tool}", request.toolDir)
+    .replaceAll("{id}", request.id)
+    .replaceAll("{runId}", request.runId ?? "")
+    .replaceAll("{role}", request.role);
+
+  const usesFileProtocol = command.includes("{input}") || command.includes("{output}");
+
+  if (!usesFileProtocol) {
+    const inputJson = `${JSON.stringify(request.input)}\n`;
+    const { code, output } = await runPipe(command, request.workdir, inputJson, request.timeoutMs);
+    if (code !== 0) {
+      throw new Error(`agent ${request.role}/${request.id} exited with code ${code ?? "unknown"}${output ? `\n${output}` : ""}`);
+    }
+    return parseAgentOutput(output, request.role, request.id);
+  }
+
   const inFile = path.join(request.scratchDir, `${request.id}.in.json`);
   const outFile = path.join(request.scratchDir, `${request.id}.out.json`);
   await mkdir(request.scratchDir, { recursive: true });
   await writeFile(inFile, `${JSON.stringify(request.input, null, 2)}\n`, "utf8");
 
-  const command = request.command
+  const fileCommand = command
     .replaceAll("{input}", inFile)
-    .replaceAll("{output}", outFile)
-    .replaceAll("{workdir}", request.workdir)
-    .replaceAll("{tool}", request.toolDir)
-    .replaceAll("{id}", request.id);
+    .replaceAll("{output}", outFile);
 
-  const { code, output } = await run(command, request.workdir, request.timeoutMs);
+  const { code, output } = await run(fileCommand, request.workdir, request.timeoutMs);
   if (code !== 0) {
     throw new Error(`agent ${request.role}/${request.id} exited with code ${code ?? "unknown"}${output ? `\n${output}` : ""}`);
   }
@@ -49,14 +99,5 @@ export async function runAgent(request: AgentRequest): Promise<Record<string, un
   } catch {
     throw new Error(`agent ${request.role}/${request.id} produced no output file`);
   }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error(`agent ${request.role}/${request.id} produced invalid JSON output`);
-  }
-  if (!parsed || typeof parsed !== "object") {
-    throw new Error(`agent ${request.role}/${request.id} produced a non-object output`);
-  }
-  return parsed as Record<string, unknown>;
+  return parseAgentOutput(raw, request.role, request.id);
 }

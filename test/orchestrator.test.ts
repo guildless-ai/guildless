@@ -8,10 +8,11 @@ import test from "node:test";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { loadOrchestraConfig } from "../src/orchestrator/config.js";
+import { EventLog, readEventsFile } from "../src/orchestrator/events.js";
 import { aggregateFindings, buildReviewMatrix } from "../src/orchestrator/review.js";
 import { renderQuietVerdict, renderStatusBoard } from "../src/orchestrator/ui.js";
-import { orchestrate } from "../src/orchestrator/workflow.js";
-import type { OrchestraConfig, OrchestrationResult, ReviewOutput, StageName, StageStatus } from "../src/orchestrator/types.js";
+import { computeVerdict, orchestrate } from "../src/orchestrator/workflow.js";
+import type { ConsensusFinding, OrchestraConfig, OrchestrationResult, ReviewOutput, StageName, StageStatus } from "../src/orchestrator/types.js";
 
 const exec = promisify(execFile);
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -172,6 +173,75 @@ test("rejects when the planner agent fails", async () => {
   }
 });
 
+test("verdict is machine-first: only unresolved high findings reject", () => {
+  const high: ConsensusFinding = { target: "src/a.ts", severity: "high", message: "x", file: "src/a.ts", reports: 1, focuses: [] };
+  const low: ConsensusFinding = { target: "src/a.ts", severity: "low", message: "y", file: "src/a.ts", reports: 1, focuses: [] };
+  assert.equal(computeVerdict(false, []), "REJECTED");
+  assert.equal(computeVerdict(true, [high]), "REJECTED");
+  assert.equal(computeVerdict(true, [low]), "ACCEPTED");
+  assert.equal(computeVerdict(true, []), "ACCEPTED");
+});
+
+test("emits live events to the event log while orchestrating", async () => {
+  const cwd = await tempRepo();
+  try {
+    const events = new EventLog(cwd);
+    const result = await orchestrate(cwd, makeConfig(), events);
+    assert.equal(result.verdict, "ACCEPTED");
+    const logged = readEventsFile(events.file);
+    assert.ok(logged.length > 0);
+    const types = new Set(logged.map((e) => e.type));
+    assert.ok(types.has("run_start"));
+    assert.ok(types.has("agent_start"));
+    assert.ok(types.has("agent_end"));
+    assert.ok(types.has("verdict"));
+    assert.ok(types.has("summary"));
+    assert.equal(logged[logged.length - 1].type, "summary");
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test("supports the stdin/stdout JSON agent protocol", async () => {
+  const cwd = await tempRepo();
+  try {
+    const config = makeConfig({
+      agentCommands: { ...makeConfig().agentCommands, planner: `node ${path.join(fixtures, "planner-pipe.cjs")}` }
+    });
+    const result = await orchestrate(cwd, config);
+    assert.equal(result.verdict, "ACCEPTED");
+    assert.equal(result.planner?.status, "ok");
+    assert.equal(result.planner?.tasks.length, 2);
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test("verifier checks design deliverables when configured", async () => {
+  const cwd = await tempRepo();
+  try {
+    const config = makeConfig({
+      verification: {
+        commands: ["node -e \"process.exit(0)\""],
+        gitDiffCheck: false,
+        http: [],
+        maxFixRounds: 1,
+        designDocuments: ["requirements.md", "api-spec.yaml"]
+      }
+    });
+    const missing = await orchestrate(cwd, config);
+    assert.equal(missing.verdict, "REJECTED");
+    assert.equal(missing.verify.find((v) => v.kind === "design")?.ok, false);
+
+    await writeFile(path.join(cwd, "requirements.md"), "# requirements");
+    await writeFile(path.join(cwd, "api-spec.yaml"), "openapi: 3.0.3\ninfo:\n  title: t\n  version: 1.0.0\npaths: {}\n");
+    const present = await orchestrate(cwd, config);
+    assert.equal(present.verify.find((v) => v.kind === "design")?.ok, true);
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
 test("loads and validates an orchestra config", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "guildless-orchcfg-"));
   try {
@@ -242,6 +312,10 @@ test("renders the status board and quiet verdict", () => {
     verify: [{ id: "v", kind: "command", label: "npm test", ok: true }],
     verdict: "ACCEPTED",
     errors: [],
+    agentMetrics: [
+      { role: "planner", id: "planner", model: "opencode/deepseek-v4-flash-free", inputTokens: 120, outputTokens: 30, elapsedMs: 1000, cost: 0 },
+      { role: "builder", id: "builder-1", model: "opencode/deepseek-v4-flash-free", inputTokens: 500, outputTokens: 200, elapsedMs: 2000, cost: 0 }
+    ],
     evidencePath: ".guildless/runs/r1/evidence.json",
     startedAt: "t",
     finishedAt: "t"
@@ -250,6 +324,7 @@ test("renders the status board and quiet verdict", () => {
   assert.match(board, /Verdict: ACCEPTED/);
   assert.match(board, /Builders\s+2\/2/);
   assert.match(board, /Verifier\s+PASS/);
+  assert.match(board, /Agents\s+2/);
   assert.equal(renderQuietVerdict(result), "");
 
   const rejected: OrchestrationResult = {

@@ -96,7 +96,10 @@ export async function loadOrchestraConfig(file: string): Promise<OrchestraConfig
     commands: loadCommands(verification),
     gitDiffCheck: verification.git_diff_check === undefined ? true : verification.git_diff_check === true,
     http: loadHttp(verification.http),
-    maxFixRounds: verification.max_fix_rounds === undefined ? 2 : count(verification.max_fix_rounds, "verification.max_fix_rounds")
+    maxFixRounds: verification.max_fix_rounds === undefined ? 2 : count(verification.max_fix_rounds, "verification.max_fix_rounds"),
+    commandTimeoutMs: verification.command_timeout_ms === undefined ? 600_000 : count(verification.command_timeout_ms, "verification.command_timeout_ms"),
+    designDocuments: verification.design_documents === undefined ? undefined : stringArray(verification.design_documents, "verification.design_documents"),
+    designDecisionsFile: verification.design_decisions_file === undefined ? undefined : nonEmptyString(verification.design_decisions_file, "verification.design_decisions_file")
   };
 
   const agentCommandsRaw = raw.agent_commands as Record<string, unknown> | undefined;

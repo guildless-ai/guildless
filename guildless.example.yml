@@ -12,3 +12,18 @@ urls:
 # Declaring "none" is valid when the verification really covers everything.
 unverifiedScope:
   - "Manual browser behavior was not verified"
+
+# Optional design-deliverables gate (SES/design quality model). Every listed
+# document must exist and be non-empty; api-spec.* must be a valid OpenAPI doc.
+design:
+  documents:
+    - requirements.md
+    - architecture.md
+    - api-spec.yaml
+    - database-schema.md
+    - test-plan.md
+    - deployment.md
+    - rollback.md
+    - operations-runbook.md
+    - verification_scope.md
+  decisions_file: design-decisions.json

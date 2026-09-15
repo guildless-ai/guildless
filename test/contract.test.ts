@@ -74,3 +74,40 @@ unverifiedScope:
     await assert.rejects(() => loadContract(file), /HTTP status/);
   });
 });
+
+test("loads an optional design deliverables section", async () => {
+  await withConfig(`testedCommit: HEAD
+commands:
+  - "npm test"
+urls:
+  - url: "https://example.com/health"
+    status: 200
+unverifiedScope:
+  - "None known"
+design:
+  documents:
+    - requirements.md
+    - api-spec.yaml
+  decisions_file: design-decisions.json
+`, async (file) => {
+    const contract = await loadContract(file);
+    assert.equal(contract.design?.documents.length, 2);
+    assert.equal(contract.design?.decisionsFile, "design-decisions.json");
+  });
+});
+
+test("rejects a contract with an empty design documents list", async () => {
+  await withConfig(`testedCommit: HEAD
+commands:
+  - "npm test"
+urls:
+  - url: "https://example.com/health"
+    status: 200
+unverifiedScope:
+  - "None known"
+design:
+  documents: []
+`, async (file) => {
+    await assert.rejects(() => loadContract(file), /design\.documents/);
+  });
+});
