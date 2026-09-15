@@ -10,6 +10,12 @@
 // without touching the network. Leads, replies and meetings are not revenue: only
 // cash_confirmed rows count, and status reports them separately from everything else.
 
+import { execFile } from "node:child_process";
+import path from "node:path";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
+
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 export interface MoneyEnv {
@@ -21,6 +27,7 @@ export interface MoneyEnv {
 export interface MoneyDeps {
   fetch: FetchLike;
   now?: () => Date;
+  runPython?: RunPython;
 }
 
 export interface CashEvent {
@@ -190,6 +197,33 @@ export async function sendOutreach(
   return { ...plan, dryRun: false, accepted, skipped: plan.recipients.length - accepted, detail };
 }
 
+export type RunPython = (args: string[], cwd: string) => Promise<{ stdout: string; code: number }>;
+
+const defaultRunPython: RunPython = async (args, cwd) => {
+  try {
+    const { stdout } = await execFileAsync("python3", args, { cwd, encoding: "utf8" });
+    return { stdout, code: 0 };
+  } catch (error) {
+    const err = error as { stdout?: string; code?: number };
+    return { stdout: err.stdout ?? "", code: typeof err.code === "number" ? err.code : 1 };
+  }
+};
+
+// The ranking lives in the Python core, which is where the evidence rules and the
+// scoring weights are defined and tested. The command hands it a payload and
+// reports its answer verbatim rather than forming a second opinion here.
+export async function decideStrategy(
+  repoRoot: string,
+  payloadPath: string,
+  top: number,
+  runPython: RunPython = defaultRunPython,
+): Promise<{ stdout: string; code: number }> {
+  return runPython(
+    ["-m", "guildless_v0.decide", "--payload", path.resolve(repoRoot, payloadPath), "--top", String(top)],
+    path.join(repoRoot, "python"),
+  );
+}
+
 function flag(argv: string[], name: string): string | undefined {
   const i = argv.indexOf(name);
   return i >= 0 ? argv[i + 1] : undefined;
@@ -220,12 +254,19 @@ export async function moneyCommand(
   void cwd;
   const env = envOf(source);
   const json = argv.includes("--json");
-  if (!env.supabaseUrl || !env.serviceKey) {
+  const sub = argv[0] ?? "status";
+  if (sub !== "decide" && (!env.supabaseUrl || !env.serviceKey)) {
     console.error("set GUILDLESS_SUPABASE_URL and GUILDLESS_SUPABASE_SERVICE_KEY");
     return 2;
   }
-  const sub = argv[0] ?? "status";
   try {
+    if (sub === "decide") {
+      const payload = flag(argv, "--payload") ?? ".guildless/money-payload.json";
+      const top = Number.parseInt(flag(argv, "--top") ?? "5", 10);
+      const out = await decideStrategy(cwd, payload, Number.isFinite(top) ? top : 5, deps.runPython);
+      if (out.stdout) console.log(out.stdout.trimEnd());
+      return out.code;
+    }
     if (sub === "status") {
       const status = await moneyStatus(env, deps);
       console.log(json ? JSON.stringify(status, null, 2) : renderStatus(status));
@@ -254,7 +295,7 @@ export async function moneyCommand(
       console.log(json ? JSON.stringify(result, null, 2) : `${result.dryRun ? "dry run" : "sent"}: ${result.accepted} accepted, ${result.skipped} skipped, ${result.recipients.length} addressable`);
       return result.recipients.length ? 0 : 1;
     }
-    console.error("usage: guildless money status|leads|outreach");
+    console.error("usage: guildless money status|leads|outreach|decide");
     return 2;
   } catch (error) {
     console.error(`money: ${(error as Error).message}`);

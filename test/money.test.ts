@@ -158,3 +158,31 @@ test("status exits non-zero while the pipeline is stalled", async () => {
   }) }, ENV);
   assert.equal(code, 1);
 });
+
+test("decide hands the payload to the python core and reports its answer verbatim", async () => {
+  const seen: string[][] = [];
+  const out = await (await import("../src/orchestrator/money.js")).decideStrategy(
+    "/repo", ".guildless/money-payload.json", 3,
+    async (args) => { seen.push(args); return { stdout: "decision  warm  (proven, score 0.3)\n", code: 0 }; },
+  );
+  assert.equal(out.code, 0);
+  assert.match(out.stdout, /decision {2}warm/);
+  assert.deepEqual(seen[0].slice(0, 2), ["-m", "guildless_v0.decide"]);
+  assert.ok(seen[0].includes("--top"));
+});
+
+test("decide runs without database credentials because it only reads a payload", async () => {
+  const code = await moneyCommand(["decide"], ".", {
+    fetch: fakeFetch({}),
+    runPython: async () => ({ stdout: "decision  warm  (proven, score 0.3)", code: 0 }),
+  }, {});
+  assert.equal(code, 0);
+});
+
+test("decide propagates the exit code when nothing can be decided", async () => {
+  const code = await moneyCommand(["decide"], ".", {
+    fetch: fakeFetch({}),
+    runPython: async () => ({ stdout: "no decision: no case survived validation", code: 1 }),
+  }, {});
+  assert.equal(code, 1);
+});
