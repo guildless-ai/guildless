@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
+import type { DesignConfig } from "./checks/design.js";
 
 export interface HttpTarget {
   url: string;
@@ -13,6 +14,7 @@ export interface GuildlessContract {
   commands: string[];
   urls: HttpTarget[];
   unverifiedScope: string[];
+  design?: DesignConfig;
 }
 
 function strings(value: unknown, key: string): string[] {
@@ -20,6 +22,25 @@ function strings(value: unknown, key: string): string[] {
     throw new Error(`${key} must be a non-empty string array`);
   }
   return value;
+}
+
+function loadDesign(raw: Record<string, unknown>): DesignConfig | undefined {
+  if (raw.design === undefined) return undefined;
+  const design = raw.design;
+  if (!design || typeof design !== "object" || Array.isArray(design)) {
+    throw new Error("design must be an object");
+  }
+  const section = design as Record<string, unknown>;
+  const documents = strings(section.documents, "design.documents");
+  if (documents.length === 0) throw new Error("design.documents must not be empty");
+  const config: DesignConfig = { documents };
+  if (section.decisions_file !== undefined) {
+    if (typeof section.decisions_file !== "string" || section.decisions_file.trim() === "") {
+      throw new Error("design.decisions_file must be a non-empty string");
+    }
+    config.decisionsFile = section.decisions_file;
+  }
+  return config;
 }
 
 export async function loadContract(file: string): Promise<GuildlessContract> {
@@ -55,6 +76,7 @@ export async function loadContract(file: string): Promise<GuildlessContract> {
     testedCommit: raw.testedCommit,
     commands: strings(raw.commands, "commands"),
     urls,
-    unverifiedScope: strings(raw.unverifiedScope, "unverifiedScope")
+    unverifiedScope: strings(raw.unverifiedScope, "unverifiedScope"),
+    design: loadDesign(raw)
   };
 }

@@ -1,9 +1,11 @@
 import path from "node:path";
 import { runAgent } from "./agent.js";
 import { DEFAULT_TOOL_DIR } from "./config.js";
+import { EventLog } from "./events.js";
 import { saveOrchestraEvidence } from "./evidence.js";
 import { aggregateFindings, buildReviewMatrix, type ReviewSpec } from "./review.js";
 import type {
+  AgentMetric,
   AgentRole,
   BreakerOutput,
   BuilderOutput,
@@ -45,13 +47,17 @@ function chunk<T>(items: T[], size: number): T[][] {
 }
 
 interface AgentContext {
+  runId: string;
   workdir: string;
   scratchDir: string;
   toolDir: string;
   config: OrchestraConfig;
+  metrics: AgentMetric[];
+  events?: EventLog;
 }
 
 function runAgentSafe<T>(context: AgentContext, role: AgentRole, id: string, input: unknown, parse: (raw: Record<string, unknown>) => T): Promise<T> {
+  context.events?.emit({ runId: context.runId, type: "agent_start", role, id });
   return runAgent({
     role,
     id,
@@ -60,8 +66,38 @@ function runAgentSafe<T>(context: AgentContext, role: AgentRole, id: string, inp
     scratchDir: context.scratchDir,
     toolDir: context.toolDir,
     timeoutMs: context.config.agentTimeoutMs,
-    input
-  }).then(parse);
+    runId: context.runId,
+    input: { runId: context.runId, role, workspace: context.workdir, ...(input as Record<string, unknown>) }
+  }).then((raw) => {
+    let metric: AgentMetric | undefined;
+    if (raw.meta && typeof raw.meta === "object") {
+      const meta = raw.meta as Record<string, unknown>;
+      metric = {
+        role,
+        id,
+        model: typeof meta.model === "string" ? meta.model : undefined,
+        inputTokens: Number.isFinite(meta.inputTokens) ? (meta.inputTokens as number) : undefined,
+        outputTokens: Number.isFinite(meta.outputTokens) ? (meta.outputTokens as number) : undefined,
+        elapsedMs: Number.isFinite(meta.elapsedMs) ? (meta.elapsedMs as number) : undefined,
+        cost: Number.isFinite(meta.cost) ? (meta.cost as number) : undefined
+      };
+      context.metrics.push(metric);
+    }
+    context.events?.emit({
+      runId: context.runId,
+      type: "agent_end",
+      role,
+      id,
+      ok: true,
+      inputTokens: metric?.inputTokens,
+      outputTokens: metric?.outputTokens,
+      cost: metric?.cost
+    });
+    return parse(raw);
+  }).catch((error) => {
+    context.events?.emit({ runId: context.runId, type: "agent_end", role, id, ok: false, error: String(error) });
+    throw error;
+  });
 }
 
 function parsePlanner(raw: Record<string, unknown>): PlannerOutput {
@@ -148,10 +184,16 @@ async function fixStage(context: AgentContext, findings: Array<ConsensusFinding 
   }));
 }
 
-export async function orchestrate(cwd: string, config: OrchestraConfig): Promise<OrchestrationResult> {
+export function computeVerdict(verifyOk: boolean, consensus: ConsensusFinding[]): "ACCEPTED" | "REJECTED" {
+  if (!verifyOk) return "REJECTED";
+  return consensus.some((finding) => finding.severity === "high") ? "REJECTED" : "ACCEPTED";
+}
+
+export async function orchestrate(cwd: string, config: OrchestraConfig, events?: EventLog): Promise<OrchestrationResult> {
   const runId = newRunId();
   const scratchDir = path.join(cwd, ".guildless", "runs", runId, "agents");
-  const context: AgentContext = { workdir: cwd, scratchDir, toolDir: DEFAULT_TOOL_DIR, config };
+  const metrics: AgentMetric[] = [];
+  const context: AgentContext = { runId, workdir: cwd, scratchDir, toolDir: DEFAULT_TOOL_DIR, config, metrics, events };
 
   const result: OrchestrationResult = {
     runId,
@@ -168,31 +210,41 @@ export async function orchestrate(cwd: string, config: OrchestraConfig): Promise
     verify: [],
     verdict: "REJECTED",
     errors: [],
+    agentMetrics: metrics,
     evidencePath: null,
     startedAt: new Date().toISOString(),
     finishedAt: ""
   };
 
+  events?.emit({ runId, type: "run_start", objective: config.objective });
+
   const fail = (stage: StageName, message: string): OrchestrationResult => {
     result.status[stage] = "fail";
     result.errors.push(message);
-    return finalize(cwd, result);
+    events?.emit({ runId, type: "stage", stage, status: "fail" });
+    return finalize(cwd, result, events);
   };
 
   result.status.planner = "running";
+  events?.emit({ runId, type: "stage", stage: "planner", status: "running" });
   try {
     result.planner = await runAgentSafe(context, "planner", "planner", { objective: config.objective, workdir: cwd }, parsePlanner);
     result.status.planner = "ok";
+    events?.emit({ runId, type: "stage", stage: "planner", status: "ok" });
+    events?.emit({ runId, type: "progress", what: "planner", done: 1, total: 1 });
   } catch (error) {
     return fail("planner", `planner failed: ${String(error)}`);
   }
 
   const taskGroups = distribute<Task>(result.planner.tasks, config.agents.builders);
   result.status.build = "running";
+  events?.emit({ runId, type: "stage", stage: "build", status: "running" });
   const builders = await Promise.all(taskGroups.map(async (tasks, index) => {
     const id = `builder-${index + 1}`;
     try {
-      return await runAgentSafe(context, "builder", id, { id, tasks, workdir: cwd }, (raw) => parseBuilder(raw, id));
+      const out = await runAgentSafe(context, "builder", id, { id, tasks, workdir: cwd }, (raw) => parseBuilder(raw, id));
+      events?.emit({ runId, type: "progress", what: "builders", done: index + 1, total: taskGroups.length });
+      return out;
     } catch (error) {
       return { id, status: "error" as const, tasks, artifacts: [], error: String(error) };
     }
@@ -202,17 +254,23 @@ export async function orchestrate(cwd: string, config: OrchestraConfig): Promise
     return fail("build", builders.filter((b) => b.status === "error").map((b) => `${b.id}: ${b.error}`).join("; "));
   }
   result.status.build = "ok";
+  events?.emit({ runId, type: "stage", stage: "build", status: "ok" });
 
   result.status.review = "running";
+  events?.emit({ runId, type: "stage", stage: "review", status: "running" });
   let stage = await reviewStage(context, builders);
   result.reviews = stage.reviews;
   result.consensus = stage.consensus;
+  events?.emit({ runId, type: "progress", what: "reviews", done: stage.reviews.length, total: stage.reviews.length });
+  events?.emit({ runId, type: "stage", stage: "review", status: "ok" });
   if (stage.reviews.some((review) => review.status === "error")) {
     return fail("review", stage.reviews.filter((r) => r.status === "error").map((r) => r.error).join("; "));
   }
 
   while (stage.consensus.length > 0 && result.fixRound < config.verification.maxFixRounds) {
     result.status.fix = "running";
+    events?.emit({ runId, type: "stage", stage: "fix", status: "running" });
+    events?.emit({ runId, type: "progress", what: "fix round", done: result.fixRound + 1, total: config.verification.maxFixRounds });
     const fixes = await fixStage(context, stage.consensus, `review-${result.fixRound + 1}`);
     result.fixes.push(...fixes);
     if (fixes.some((fix) => fix.status === "error")) {
@@ -225,24 +283,31 @@ export async function orchestrate(cwd: string, config: OrchestraConfig): Promise
   }
   result.status.review = "ok";
   result.status.fix = result.fixRound > 0 ? "ok" : "skipped";
+  events?.emit({ runId, type: "stage", stage: "fix", status: result.status.fix });
 
   if (config.agents.breakers > 0) {
     result.status.break = "running";
+    events?.emit({ runId, type: "stage", stage: "break", status: "running" });
     try {
       result.breaker = await runAgentSafe(context, "breaker", "breaker", {
         artifacts: builders.flatMap((builder) => builder.artifacts),
         workdir: cwd
       }, (raw) => parseBreaker(raw, "breaker"));
       result.status.break = "ok";
+      events?.emit({ runId, type: "stage", stage: "break", status: "ok" });
     } catch (error) {
       return fail("break", `breaker failed: ${String(error)}`);
     }
   } else {
     result.status.break = "skipped";
+    events?.emit({ runId, type: "stage", stage: "break", status: "skipped" });
   }
 
   result.status.verify = "running";
-  result.verify = await runVerification(cwd, config.verification);
+  events?.emit({ runId, type: "stage", stage: "verify", status: "running" });
+  result.verify = await runVerification(cwd, config.verification, {
+    onResult: (label, ok) => events?.emit({ runId, type: "verify", label, ok })
+  });
   let verifyAttempts = 0;
   while (!result.verify.every((item) => item.ok) && result.fixRound < config.verification.maxFixRounds && verifyAttempts < config.verification.maxFixRounds) {
     if (config.agents.fixers < 1) break;
@@ -259,17 +324,32 @@ export async function orchestrate(cwd: string, config: OrchestraConfig): Promise
     if (fixes.some((fix) => fix.status === "error")) break;
     result.fixRound += 1;
     verifyAttempts += 1;
-    result.verify = await runVerification(cwd, config.verification);
+    result.verify = await runVerification(cwd, config.verification, {
+      onResult: (label, ok) => events?.emit({ runId, type: "verify", label, ok })
+    });
   }
   result.status.verify = result.verify.every((item) => item.ok) ? "ok" : "fail";
+  events?.emit({ runId, type: "stage", stage: "verify", status: result.status.verify });
 
-  const reviewResolved = result.consensus.length === 0;
-  result.verdict = reviewResolved && result.verify.every((item) => item.ok) ? "ACCEPTED" : "REJECTED";
-  return finalize(cwd, result);
+  const verifyOk = result.verify.every((item) => item.ok);
+  result.verdict = computeVerdict(verifyOk, result.consensus);
+  events?.emit({ runId, type: "verdict", verdict: result.verdict });
+  return finalize(cwd, result, events);
 }
 
-function finalize(cwd: string, result: OrchestrationResult): OrchestrationResult {
+function finalize(cwd: string, result: OrchestrationResult, events?: EventLog): OrchestrationResult {
   result.finishedAt = new Date().toISOString();
+  const tokens = result.agentMetrics.reduce((sum, m) => sum + (m.inputTokens ?? 0) + (m.outputTokens ?? 0), 0);
+  const cost = result.agentMetrics.reduce((sum, m) => sum + (m.cost ?? 0), 0);
+  events?.emit({
+    runId: result.runId,
+    type: "summary",
+    accepted: result.verdict === "ACCEPTED",
+    elapsedMs: Date.parse(result.finishedAt) - Date.parse(result.startedAt),
+    tokens,
+    cost,
+    humanInterventions: 0
+  });
   try {
     result.evidencePath = saveOrchestraEvidence(cwd, result);
   } catch (error) {

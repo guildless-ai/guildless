@@ -5,18 +5,35 @@ import { pathToFileURL } from "node:url";
 import { loadContract, type GuildlessContract } from "./contract.js";
 import { checkCommands } from "./checks/command.js";
 import { checkCommitMatch } from "./checks/commit-match.js";
+import { checkDesign } from "./checks/design.js";
 import { checkGitClean } from "./checks/git-clean.js";
 import { checkHttp } from "./checks/http.js";
 import { checkUnverifiedScope } from "./checks/unverified-scope.js";
 import type { CheckResult } from "./checks/types.js";
 import { newRunId, saveEvidence } from "./evidence.js";
 import { orchestrateCommand } from "./orchestrator/command.js";
+import { batchCommand } from "./orchestrator/batch.js";
+import { huntCommand } from "./orchestrator/hunt.js";
+import { runCommand } from "./orchestrator/run.js";
+import { moneyCommand } from "./orchestrator/money.js";
+import { productCommand } from "./orchestrator/product.js";
+import { statsCommand, workCommand } from "./orchestrator/work.js";
+import { watchCommand } from "./orchestrator/watch.js";
 import { renderReport, type VerificationReport } from "./report.js";
 
 function usage(): string {
   return "Usage:\n" +
+    "  guildless run \"<goal>\" [--config <path>] [--json] [--quiet]\n" +
+    "  guildless orchestrate [--config <path>] [--json] [--quiet]\n" +
+    "  guildless work --repo <owner/repo> --issue <number> [--config <path>] [--push] [--dry-run] [--json] [--quiet]\n" +
+    "  guildless hunt [--language ts|python|both] [--limit N] [--json]\n" +
+    "  guildless money status|leads|outreach [--json] [--missing-route] [--send]\n" +
+    "  guildless batch --hunt <file> [--limit N] [--dry-run|--push] [--json]\n" +
+    "  guildless stats [--json] [--markdown] [--check-merged]\n" +
+    "  guildless watch [--file <path>] [--json] [--once] [--interval <ms>]\n" +
     "  guildless verify [--config <path>] [--json] [--verbose] [--quiet]\n" +
-    "  guildless orchestrate [--config <path>] [--json] [--quiet]";
+    "  guildless persona start|stop|status|replay <run-id> [--speed N] [--file <path>]\n" +
+    "  guildless product \"<goal>\" [--resume <run-id>] [--status <run-id>] [--replay <run-id>] [--critic <run-id>]";
 }
 
 async function defaultConfig(cwd: string): Promise<string> {
@@ -33,6 +50,40 @@ export async function main(argv = process.argv.slice(2), cwd = process.cwd()): P
   }
   if (argv[0] === "orchestrate") {
     return orchestrateCommand(argv.slice(1), cwd);
+  }
+  if (argv[0] === "work") {
+    return workCommand(argv.slice(1), cwd);
+  }
+  if (argv[0] === "stats") {
+    return statsCommand(argv.slice(1), cwd);
+  }
+  if (argv[0] === "hunt") {
+    return huntCommand(argv.slice(1), cwd);
+  }
+  if (argv[0] === "money") {
+    return moneyCommand(argv.slice(1), cwd);
+  }
+  if (argv[0] === "batch") {
+    return batchCommand(argv.slice(1), cwd);
+  }
+  if (argv[0] === "watch") {
+    return watchCommand(argv.slice(1), cwd);
+  }
+  if (argv[0] === "product") {
+    return productCommand(argv.slice(1));
+  }
+  if (argv[0] === "run") {
+    return runCommand(argv.slice(1), cwd);
+  }
+  if (argv[0] === "persona") {
+    try {
+      const spec = "./persona/cli.js";
+      const { personaCommand } = await import(spec) as { personaCommand: (argv: string[], cwd: string) => Promise<number> };
+      return personaCommand(argv.slice(1), cwd);
+    } catch (error) {
+      console.error(`Persona integration unavailable: ${error instanceof Error ? error.message : String(error)}`);
+      return 1;
+    }
   }
   if (argv[0] !== "verify") {
     console.error(usage());
@@ -58,6 +109,7 @@ export async function main(argv = process.argv.slice(2), cwd = process.cwd()): P
     checks.push(await checkCommands(cwd, contract.commands));
     checks.push(await checkHttp(contract.urls));
     checks.push(checkUnverifiedScope(contract.unverifiedScope));
+    if (contract.design) checks.push(await checkDesign(cwd, contract.design));
     report = { accepted: checks.every((check) => check.ok), checks, runId: null, evidencePath: null, evidenceError: null };
   } catch (error) {
     report = {

@@ -18,6 +18,18 @@ verification:
     - npm test
     - npm run lint
   git_diff_check: true
+  # Design-deliverables gate: the machine verifier requires these to exist.
+  # design_documents:
+  #   - requirements.md
+  #   - architecture.md
+  #   - api-spec.yaml
+  #   - database-schema.md
+  #   - test-plan.md
+  #   - deployment.md
+  #   - rollback.md
+  #   - operations-runbook.md
+  #   - verification_scope.md
+  # design_decisions_file: design-decisions.json
   # http:
   #   - url: "https://example.com/health"
   #     status: 200

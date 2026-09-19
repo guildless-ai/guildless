@@ -41,6 +41,8 @@ Money Playbook Compilerの詳細は [`docs/money-playbook-compiler.md`](docs/mon
 
 成果物のDefinition of DoneとAsset Ledgerは [`docs/artifact-system.md`](docs/artifact-system.md) を参照してください。GitHub公開は全成果物の既定値ではなく、目的と成果物種別から配布先を選びます。
 
+CLI（`verify` / `orchestrate` / `work` / `batch` / `watch`）の詳細は [`docs/cli-reference.md`](docs/cli-reference.md) を参照してください。
+
 ## 開発
 
 ```sh
