@@ -37,6 +37,11 @@
   .hpbox.right .hp { direction: rtl; }
   .hp > i { display:block; height:100%; background:var(--ink); transition:width .08s; }
   .stage { position:relative; }
+  body.idle header, body.idle #draw, body.idle #perks, body.idle #log, body.idle details, body.idle #next, body.idle #restart, body.idle #enemystats { display:none !important; }
+  body.idle main { display:block; padding:6px; max-width:none; }
+  body.idle section { padding:6px; box-shadow:none; border-width:1px; }
+  body.idle #idlebar { display:flex; }
+  #idlebar { display:none; justify-content:space-between; font-size:12px; color:var(--muted); margin-top:4px; }
   .banner { position:absolute; left:0; right:0; top:28%; text-align:center; font-size:44px; font-weight:900; pointer-events:none; text-shadow: 3px 3px 0 #fff, -2px -2px 0 #fff, 2px -2px 0 #fff, -2px 2px 0 #fff; }
   .banner.pop { animation: pop .45s cubic-bezier(.2,1.6,.4,1) both; }
   @keyframes pop { from { transform: scale(.3) rotate(-8deg); opacity:0 } to { transform: scale(1) rotate(-3deg); opacity:1 } }
@@ -50,7 +55,7 @@
   <div id="status"></div>
 </header>
 <main>
-  <section>
+  <section id="draw">
     <div class="row">
       <strong>描く</strong>
       <span class="hint">インクは有限。何を描く？</span>
@@ -83,8 +88,10 @@
     <div class="row">
       <button id="next" disabled>次のラウンド</button>
       <button id="restart">最初から</button>
+      <button id="idle" title="画面端に置いて作業しながら眺める">放置モード</button>
     </div>
     <div id="log"></div>
+    <div id="idlebar"><span id="idlestats"></span><button id="idleexit">描くに戻る</button></div>
     <details style="margin-top:8px">
       <summary class="hint">友だちと対戦（共有コード）</summary>
       <div class="row"><button id="copycode">今の絵のコードをコピー</button><span id="copied" class="hint"></span></div>

@@ -44,6 +44,8 @@ export interface ArenaRenderer {
   draw(s: ReplayState): void;
   /** Show only the enemy, idle, before the round starts. */
   preview(b: FighterView, xB: number): void;
+  /** The canvas was resized (e.g. to a wide strip for idle mode). */
+  resize(): void;
 }
 
 /** Index of the boil variant to show at time t (8 fps). */

@@ -13,6 +13,7 @@ export class Arena2D implements ArenaRenderer {
     this.ctx = canvas.getContext('2d')!;
   }
   setFighters(a: FighterView, b: FighterView): void { this.a = a; this.b = b; }
+  resize(): void { /* draws from canvas size every frame */ }
   preview(b: FighterView, xB: number): void {
     this.a = null; this.b = b;
     this.draw({ t: 0, xA: -999, xB, poseA: IDLE, poseB: IDLE, phaseA: IDLE_PHASE, phaseB: IDLE_PHASE, hpA: 1, hpB: 1, hpA0: 1, hpB0: 1, popups: [], shake: 0, flashA: false, flashB: false });
@@ -23,7 +24,7 @@ export class Arena2D implements ArenaRenderer {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     if (s.shake > 0) ctx.translate((Math.random() - 0.5) * s.shake * 2, (Math.random() - 0.5) * s.shake * 2);
     ctx.fillStyle = '#f1ede2';
-    ctx.fillRect(0, 220, canvas.width, 80);
+    ctx.fillRect(0, 220, canvas.width, Math.max(0, canvas.height - 220));
     if (this.a) this.blit(this.a, s.xA, 220, 1, s.poseA, s.phaseA, s.t, s.flashA);
     if (this.b) this.blit(this.b, s.xB, 220, -1, s.poseB, s.phaseB, s.t, s.flashB);
     for (const p of s.popups) {

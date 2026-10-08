@@ -144,6 +144,15 @@ export class Arena3D implements ArenaRenderer {
     this.assign(this.b, b);
   }
 
+  resize(): void {
+    const c = this.renderer.domElement;
+    this.renderer.setSize(c.width, c.height, false);
+    this.camera.aspect = c.width / c.height;
+    // Wide strips: pull the camera back a little so both fighters stay in frame.
+    this.camera.fov = this.camera.aspect > 2 ? 24 : 30;
+    this.camera.updateProjectionMatrix();
+  }
+
   preview(b: FighterView, xB: number): void {
     this.a.mesh.visible = false; this.a.shadow.visible = false;
     this.assign(this.b, b);

@@ -4,6 +4,7 @@ import { Arena2D } from './arena2d.js';
 import { Arena3D } from './arena3d.js';
 import { ARENA_W, makeFighter, simulate, type BattleEvent, type Fighter } from './battle.js';
 import { generateEnemy } from './enemy.js';
+import { afterWave, idleBudget, loadIdle, newIdle, saveIdle, type IdleState } from './idle.js';
 import { loadGallery, pickRival, saveWinner } from './gallery.js';
 import { applyPerks, offerPerks, type Perk } from './perks.js';
 import { CSS, drawDrawing, makeFrameFactory } from './render.js';
@@ -115,6 +116,63 @@ const palette = $('palette');
   b.onclick = () => { penWidth = w; };
   palette.appendChild(b);
 });
+
+// ---------- idle (second-monitor) mode ----------
+let idle: IdleState | null = null;
+let idleTimer = 0;
+
+/** Enter idle mode: wide strip, your doodle (or a past winner) fights endless waves. */
+function enterIdle(): void {
+  if (busy || idle) return;
+  if (drawing.strokes.length === 0) {
+    const g = loadGallery(localStorage);
+    const pick = g.length ? pickRival(g, 99, mulberry32(Date.now() % 100000)) ?? pickRival(g, g[g.length - 1].round, mulberry32(1)) : null;
+    if (!pick) { log('放置モードには絵が要る。何か描くか一勝してから'); return; }
+    drawing = pick.drawing;
+  }
+  idle = loadIdle(localStorage) ?? newIdle();
+  document.body.classList.add('idle');
+  arena.width = 960; arena.height = 220;
+  renderer.resize();
+  redrawPad();
+  idleWave();
+}
+
+function exitIdle(): void {
+  if (!idle) return;
+  clearTimeout(idleTimer);
+  sfx.enabled = true;
+  idle = null;
+  document.body.classList.remove('idle');
+  arena.width = 480; arena.height = 300;
+  renderer.resize();
+  busy = false;
+  startRound(false, true);
+}
+
+function idleWave(): void {
+  if (!idle) return;
+  const st = idle;
+  const a = makeFighter('あなたの絵', structuredClone(drawing), 60, applyPerks(run.perks));
+  const foe = generateEnemy(Math.min(10, 1 + Math.floor((st.wave - 1) / 2)), idleBudget(st.wave), st.seed + st.wave * 101);
+  const b = makeFighter(`${foe.name} (wave ${st.wave})`, foe.drawing, ARENA_W - 60);
+  const result = simulate(a, b, st.seed + st.wave);
+  sfx.enabled = false;
+  busy = true;
+  $('idlestats').textContent = `wave ${st.wave} ・ ${st.wins} 勝 ・ 連勝 ${st.streak}（最高 ${st.bestStreak}）`;
+  replay(a, b, result.events, () => {
+    busy = false;
+    banner(null);
+    if (!idle) return;
+    idle = afterWave(idle, result.winner);
+    saveIdle(localStorage, idle);
+    $('idlestats').textContent = `wave ${idle.wave} ・ ${idle.wins} 勝 ・ 連勝 ${idle.streak}（最高 ${idle.bestStreak}）`;
+    idleTimer = window.setTimeout(idleWave, 1200);
+  });
+}
+
+$('idle').onclick = enterIdle;
+$('idleexit').onclick = exitIdle;
 
 $('undo').onclick = () => { drawing.strokes.pop(); redrawPad(); };
 $('clear').onclick = () => { drawing.strokes = []; redrawPad(); };
@@ -326,6 +384,7 @@ function updateStatus(): void {
 }
 
 startRound(true);
+if (new URLSearchParams(location.search).has('idle')) enterIdle();
 
 // Debug surface for automated tests: inspect the current doodle's segmentation.
 (window as unknown as { __rakugaki: unknown }).__rakugaki = {
