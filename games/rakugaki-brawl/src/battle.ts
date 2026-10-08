@@ -1,4 +1,5 @@
 import { analyze, elementMultiplier } from './analyze.js';
+import { BASE_MODIFIERS, type Modifiers } from './perks.js';
 import { mulberry32 } from './rng.js';
 import type { Drawing, Stats } from './types.js';
 
@@ -10,6 +11,7 @@ export interface Fighter {
   x: number;
   /** Seconds until the next attack is allowed. */
   cooldown: number;
+  critChance: number;
 }
 
 export type BattleEvent =
@@ -27,9 +29,16 @@ const WALK_SPEED = 90; // px per second
 const TIME_LIMIT = 45; // seconds
 const DT = 1 / 60;
 
-export function makeFighter(name: string, drawing: Drawing, x: number): Fighter {
-  const stats = analyze(drawing);
-  return { name, drawing, stats, hp: stats.hp, x, cooldown: 0.3 };
+export function makeFighter(name: string, drawing: Drawing, x: number, mods: Modifiers = BASE_MODIFIERS): Fighter {
+  const base = analyze(drawing);
+  const stats: Stats = {
+    ...base,
+    hp: Math.round(base.hp * mods.hpMul),
+    atk: Math.round(base.atk * mods.atkMul),
+    spd: Math.round(base.spd * mods.spdMul * 100) / 100,
+    reach: base.reach + mods.reachBonus,
+  };
+  return { name, drawing, stats, hp: stats.hp, x, cooldown: 0.3, critChance: mods.critChance };
 }
 
 /**
@@ -74,7 +83,7 @@ export function simulate(a: Fighter, b: Fighter, seed = 1): BattleResult {
 
 function attack(from: Fighter, to: Fighter, who: 'a' | 'b', t: number, rand: () => number): BattleEvent {
   const mult = elementMultiplier(from.stats.element, to.stats.element);
-  const crit = rand() < 0.1;
+  const crit = rand() < from.critChance;
   const variance = 0.85 + rand() * 0.3;
   const dmg = Math.max(1, Math.round(from.stats.atk * mult * variance * (crit ? 2 : 1)));
   to.hp = Math.max(0, to.hp - dmg);

@@ -29,6 +29,8 @@
   .stats div { background:#f1ede2; padding:4px 6px; border-radius:6px; }
   #log { font-size:13px; max-height:120px; overflow:auto; background:#f1ede2; padding:8px; border-radius:8px; white-space:pre-line; }
   .hint { font-size:12px; color:var(--muted); }
+  .perk { flex:1; min-width:120px; text-align:left; }
+  .perk small { display:block; color:var(--muted); }
 </style>
 </head>
 <body>
@@ -59,11 +61,18 @@
     <div class="row"><strong>バトル</strong><span id="roundinfo" class="hint"></span></div>
     <canvas id="arena" width="480" height="300"></canvas>
     <div class="stats" id="enemystats"></div>
+    <div id="perks" class="row" hidden></div>
     <div class="row">
       <button id="next" disabled>次のラウンド</button>
       <button id="restart">最初から</button>
     </div>
     <div id="log"></div>
+    <details style="margin-top:8px">
+      <summary class="hint">友だちと対戦（共有コード）</summary>
+      <div class="row"><button id="copycode">今の絵のコードをコピー</button><span id="copied" class="hint"></span></div>
+      <div class="row"><input id="pastecode" placeholder="相手のコードを貼る" style="flex:1;padding:6px;font:inherit" /><button id="usecode">この絵と対戦</button></div>
+      <p class="hint">コードは絵そのもの。サーバ不要で、相手の落書きが次のラウンドの敵になる。</p>
+    </details>
   </section>
 </main>
 <script type="module" src="/src/main.ts"></script>

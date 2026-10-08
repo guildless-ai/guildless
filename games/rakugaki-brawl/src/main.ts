@@ -1,7 +1,10 @@
 import { analyze, totalInk } from './analyze.js';
 import { ARENA_W, makeFighter, simulate, type BattleEvent, type Fighter } from './battle.js';
 import { generateEnemy } from './enemy.js';
+import { applyPerks, offerPerks, type Perk } from './perks.js';
 import { CSS, drawDrawing, toSprite } from './render.js';
+import { mulberry32 } from './rng.js';
+import { decodeDrawing, encodeDrawing } from './share.js';
 import { applyResult, inkBudget, MAX_ROUNDS, newRun, type RunState } from './run.js';
 import type { Color, Drawing, Point, Stats, Stroke } from './types.js';
 
@@ -18,6 +21,10 @@ let color: Color = 'black';
 let penWidth = 8;
 let enemy = generateEnemy(run.round, inkBudget(run.round), run.seed);
 let busy = false;
+/** A doodle pasted from a share code; used as the next enemy instead of a generated one. */
+let challenger: { name: string; drawing: Drawing } | null = null;
+
+const budget = () => inkBudget(run.round, applyPerks(run.perks).inkBonus);
 
 // ---------- drawing pad ----------
 function canvasPoint(e: PointerEvent): Point {
@@ -46,16 +53,16 @@ pad.addEventListener('pointerup', endStroke);
 pad.addEventListener('pointercancel', endStroke);
 
 function remainingInk(): number {
-  return inkBudget(run.round) - totalInk(drawing);
+  return budget() - totalInk(drawing);
 }
 
 function redrawPad(): void {
   padCtx.clearRect(0, 0, pad.width, pad.height);
   drawDrawing(padCtx, drawing);
-  const budget = inkBudget(run.round);
+  const total = budget();
   const left = Math.max(0, remainingInk());
-  $('inkbar').style.width = `${(left / budget) * 100}%`;
-  $('inktext').textContent = `${Math.round(left)} / ${budget}`;
+  $('inkbar').style.width = `${(left / total) * 100}%`;
+  $('inktext').textContent = `${Math.round(left)} / ${total}`;
   renderStats($('mystats'), drawing.strokes.length ? analyze(drawing) : null);
   $<HTMLButtonElement>('fight').disabled = busy || drawing.strokes.length === 0;
 }
@@ -99,7 +106,7 @@ $('fight').onclick = () => {
   if (busy || drawing.strokes.length === 0) return;
   busy = true;
   $<HTMLButtonElement>('fight').disabled = true;
-  const a = makeFighter('あなた', structuredClone(drawing), 60);
+  const a = makeFighter('あなた', structuredClone(drawing), 60, applyPerks(run.perks));
   const b = makeFighter(enemy.name, structuredClone(enemy.drawing), ARENA_W - 60);
   const result = simulate(a, b, run.seed + run.round);
   log(`ラウンド ${run.round}: ${a.name} (${a.stats.hp}HP/${a.stats.atk}ATK) vs ${b.name} (${b.stats.hp}HP/${b.stats.atk}ATK)`);
@@ -111,6 +118,8 @@ $('fight').onclick = () => {
     if (run.over) {
       log(run.lives <= 0 ? `ゲームオーバー。${run.wins} 勝` : `完走！ ${run.wins} 勝 / ${MAX_ROUNDS} 戦`);
       $<HTMLButtonElement>('next').disabled = true;
+    } else if (result.winner === 'a') {
+      showPerks();
     } else {
       $<HTMLButtonElement>('next').disabled = false;
     }
@@ -194,10 +203,52 @@ function log(line: string): void {
   el.textContent = line + '\n' + (el.textContent ?? '');
 }
 
-function startRound(fresh: boolean): void {
+/** After a win the player picks one of three perks before the next round. */
+function showPerks(): void {
+  const box = $('perks');
+  box.innerHTML = '';
+  box.hidden = false;
+  const offers: Perk[] = offerPerks(mulberry32(run.seed * 31 + run.round));
+  for (const perk of offers) {
+    const b = document.createElement('button');
+    b.className = 'perk';
+    b.innerHTML = `<strong>${perk.name}</strong><small>${perk.desc}</small>`;
+    b.onclick = () => {
+      run = { ...run, perks: [...run.perks, perk.id] };
+      log(`アップグレード: ${perk.name}`);
+      box.hidden = true;
+      startRound(false);
+    };
+    box.appendChild(b);
+  }
+}
+
+// ---------- share codes ----------
+$('copycode').onclick = async () => {
+  if (drawing.strokes.length === 0) { $('copied').textContent = 'まず何か描いて'; return; }
+  const code = encodeDrawing(drawing);
+  try { await navigator.clipboard.writeText(code); $('copied').textContent = `コピーした (${code.length}文字)`; }
+  catch { $<HTMLInputElement>('pastecode').value = code; $('copied').textContent = '下の欄に出した'; }
+};
+$('usecode').onclick = () => {
+  const code = $<HTMLInputElement>('pastecode').value;
+  try {
+    const d = decodeDrawing(code);
+    if (d.strokes.length === 0) throw new Error('empty drawing');
+    challenger = { name: 'ともだちの絵', drawing: d };
+    log('次のラウンドは共有コードの絵と対戦');
+    if (!busy) startRound(false, true);
+  } catch (e) {
+    log(`コードを読めない: ${(e as Error).message}`);
+  }
+};
+
+function startRound(fresh: boolean, keepDrawing = false): void {
   if (fresh) $('log').textContent = '';
-  drawing = { strokes: [], width: pad.width, height: pad.height };
-  enemy = generateEnemy(run.round, inkBudget(run.round), run.seed);
+  if (!keepDrawing) drawing = { strokes: [], width: pad.width, height: pad.height };
+  $('perks').hidden = true;
+  if (challenger) { enemy = challenger; challenger = null; }
+  else enemy = generateEnemy(run.round, inkBudget(run.round), run.seed);
   $<HTMLButtonElement>('next').disabled = true;
   // preview enemy in arena
   const es = analyze(enemy.drawing);
@@ -213,7 +264,8 @@ function startRound(fresh: boolean): void {
 }
 
 function updateStatus(): void {
-  $('status').textContent = `ラウンド ${Math.min(run.round, MAX_ROUNDS)}/${MAX_ROUNDS} ・ 残機 ${'♥'.repeat(run.lives)} ・ ${run.wins} 勝`;
+  const perks = run.perks.length ? ` ・ 強化 ${run.perks.length}` : '';
+  $('status').textContent = `ラウンド ${Math.min(run.round, MAX_ROUNDS)}/${MAX_ROUNDS} ・ 残機 ${'♥'.repeat(run.lives)} ・ ${run.wins} 勝${perks}`;
   $('roundinfo').textContent = `seed ${run.seed}`;
 }
 
