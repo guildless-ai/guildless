@@ -69,30 +69,101 @@ export function blend(a: Pose, b: Pose, w: number): Pose {
   return { dx: a.dx + (b.dx - a.dx) * w, dy: a.dy + (b.dy - a.dy) * w, sx: a.sx + (b.sx - a.sx) * w, sy: a.sy + (b.sy - a.sy) * w, rot: a.rot + (b.rot - a.rot) * w };
 }
 
+/** What a fighter is doing at time t, with normalised progress u in [0,1). */
+export interface Phase {
+  kind: 'walk' | 'idle' | 'attack' | 'hit' | 'ko';
+  u: number;
+  big: boolean;
+  /** Set when an attack and a hit overlap: the attack phase runs underneath. */
+  under?: Phase;
+}
+
+export function phaseAt(events: BattleEvent[], who: 'a' | 'b', t: number, moving: boolean): Phase {
+  const end = events.find((e) => e.kind === 'end');
+  if (end && end.kind === 'end' && t >= end.t && end.winner !== who && end.winner !== 'draw') {
+    return { kind: 'ko', u: Math.min(1, (t - end.t) / KO_DURATION), big: false };
+  }
+  let attack: Phase | null = null;
+  let hit: Phase | null = null;
+  for (const e of events) {
+    if (e.kind !== 'hit') continue;
+    if (e.from === who) {
+      const start = e.t - ATTACK_LEAD;
+      if (t >= start && t < e.t + ATTACK_TAIL) attack = { kind: 'attack', u: (t - start) / (ATTACK_LEAD + ATTACK_TAIL), big: e.crit };
+    } else if (t >= e.t && t < e.t + HIT_DURATION) {
+      hit = { kind: 'hit', u: (t - e.t) / HIT_DURATION, big: e.crit || e.mult > 1 };
+    }
+  }
+  if (hit && attack) return { ...hit, under: attack };
+  if (hit) return hit;
+  if (attack) return attack;
+  return moving ? { kind: 'walk', u: t, big: false } : { kind: 'idle', u: t, big: false };
+}
+
+/** Body pose for a phase. */
+export function poseOf(ph: Phase): Pose {
+  switch (ph.kind) {
+    case 'ko': return koPose(ph.u);
+    case 'attack': return attackPose(ph.u);
+    case 'hit': return ph.under ? blend(poseOf(ph.under), hitPose(ph.u, ph.big), 0.7) : hitPose(ph.u, ph.big);
+    case 'walk': return walkPose(ph.u);
+    default: return idlePose(ph.u);
+  }
+}
+
 /**
  * Pose of fighter `who` at replay time `t`, derived purely from the event
  * log so the 2D and 3D renderers animate identically. `moving` says whether
  * the fighter is still walking in (from the renderer's position tracking).
  */
 export function poseAt(events: BattleEvent[], who: 'a' | 'b', t: number, moving: boolean): Pose {
-  const end = events.find((e) => e.kind === 'end');
-  if (end && end.kind === 'end' && t >= end.t && end.winner !== who && end.winner !== 'draw') {
-    return koPose((t - end.t) / KO_DURATION);
-  }
-  // Latest relevant hit events: one we deal (attack anim) and one we take (hit anim).
-  let attack: Pose | null = null;
-  let hit: Pose | null = null;
-  for (const e of events) {
-    if (e.kind !== 'hit') continue;
-    if (e.from === who) {
-      const start = e.t - ATTACK_LEAD;
-      if (t >= start && t < e.t + ATTACK_TAIL) attack = attackPose((t - start) / (ATTACK_LEAD + ATTACK_TAIL));
-    } else if (t >= e.t && t < e.t + HIT_DURATION) {
-      hit = hitPose((t - e.t) / HIT_DURATION, e.crit || e.mult > 1);
+  return poseOf(phaseAt(events, who, t, moving));
+}
+
+/**
+ * Limb swing angles for a phase. Legs alternate while walking, the arms
+ * swing opposite; an attack winds the arms back then whips them forward;
+ * a hit flails; a KO lets everything hang.
+ */
+export function limbPoseOf(ph: Phase, legCount: number, armCount: number): { legs: number[]; arms: number[] } {
+  const legs: number[] = [], arms: number[] = [];
+  const alt = (i: number) => (i % 2 === 0 ? 1 : -1);
+  switch (ph.kind) {
+    case 'walk': {
+      const s = Math.sin(ph.u * 9);
+      for (let i = 0; i < legCount; i++) legs.push(s * 0.45 * alt(i));
+      for (let i = 0; i < armCount; i++) arms.push(-s * 0.35 * alt(i));
+      break;
+    }
+    case 'idle': {
+      const s = Math.sin(ph.u * 4);
+      for (let i = 0; i < legCount; i++) legs.push(0);
+      for (let i = 0; i < armCount; i++) arms.push(s * 0.06);
+      break;
+    }
+    case 'attack': {
+      const land = ATTACK_LEAD / (ATTACK_LEAD + ATTACK_TAIL);
+      // wind back to -1.1 rad, whip through to +1.0 at landing, settle to 0.
+      let a: number;
+      if (ph.u < land * 0.6) a = -1.1 * (ph.u / (land * 0.6));
+      else if (ph.u < land) { const v = (ph.u - land * 0.6) / (land * 0.4); a = -1.1 + 2.1 * v * v; }
+      else { const v = (ph.u - land) / (1 - land); a = 1.0 * (1 - v); }
+      for (let i = 0; i < armCount; i++) arms.push(a);
+      const spread = Math.max(0, a) * 0.4;
+      for (let i = 0; i < legCount; i++) legs.push(spread * alt(i));
+      break;
+    }
+    case 'hit': {
+      const f = Math.sin(ph.u * 22) * 0.5 * (1 - ph.u);
+      for (let i = 0; i < legCount; i++) legs.push(f * alt(i));
+      for (let i = 0; i < armCount; i++) arms.push(0.9 * (1 - ph.u) + f * alt(i));
+      break;
+    }
+    case 'ko': {
+      for (let i = 0; i < legCount; i++) legs.push(0.8 * ph.u * alt(i));
+      for (let i = 0; i < armCount; i++) arms.push(1.2 * ph.u);
+      break;
     }
   }
-  if (hit && attack) return blend(attack, hit, 0.7);
-  if (hit) return hit;
-  if (attack) return attack;
-  return moving ? walkPose(t) : idlePose(t);
+  return { legs, arms };
 }

@@ -1,11 +1,14 @@
-import type { Pose } from './anim.js';
+import type { Phase, Pose } from './anim.js';
 
 /** What a renderer needs to draw one fighter. */
 export interface FighterView {
   name: string;
   color: string;
-  /** Boil variants of the cutout, cycled at ~8 fps. All the same size. */
-  sprites: HTMLCanvasElement[];
+  /** Frame size in px; every frame() result has exactly this size. */
+  width: number;
+  height: number;
+  /** Rasterise the doodle for time t in the given phase (limbs posed, boil applied). */
+  frame(t: number, phase: Phase): HTMLCanvasElement;
 }
 
 export interface Popup {
@@ -23,6 +26,8 @@ export interface ReplayState {
   xB: number;
   poseA: Pose;
   poseB: Pose;
+  phaseA: Phase;
+  phaseB: Phase;
   hpA: number;
   hpB: number;
   hpA0: number;

@@ -1,7 +1,9 @@
 import * as THREE from 'three';
-import type { Pose } from './anim.js';
+import type { Phase, Pose } from './anim.js';
 import { IDLE } from './anim.js';
-import { boilIndex, type ArenaRenderer, type FighterView, type ReplayState } from './view.js';
+import type { ArenaRenderer, FighterView, ReplayState } from './view.js';
+
+const IDLE_PHASE: Phase = { kind: 'idle', u: 0, big: false };
 
 /** Arena pixels per world unit. Arena is 480 px wide -> 6 units. */
 const PPU = 80;
@@ -11,7 +13,7 @@ interface Cutout {
   group: THREE.Group;   // handles position and facing
   mesh: THREE.Mesh;     // handles pose (offset, scale, roll)
   shadow: THREE.Mesh;
-  mats: THREE.MeshLambertMaterial[]; // front/back materials, one per boil variant
+  face: THREE.MeshLambertMaterial | null; // front/back material, texture updated every frame
   side: THREE.MeshLambertMaterial;
   view: FighterView | null;
   w: number;
@@ -78,39 +80,38 @@ export class Arena3D implements ArenaRenderer {
     shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.002; shadow.visible = false;
     group.add(shadow);
     this.scene.add(group);
-    return { group, mesh, shadow, mats: [], side, view: null, w: 1, h: 1 };
+    return { group, mesh, shadow, face: null, side, view: null, w: 1, h: 1 };
   }
 
   private assign(c: Cutout, view: FighterView): void {
-    for (const m of c.mats) { m.map?.dispose(); m.dispose(); }
-    c.mats = view.sprites.map((canvas) => {
-      const tex = new THREE.CanvasTexture(canvas);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      tex.minFilter = THREE.LinearFilter;
-      return new THREE.MeshLambertMaterial({ map: tex, transparent: true, alphaTest: 0.4, side: THREE.DoubleSide });
-    });
+    if (c.face) { c.face.map?.dispose(); c.face.dispose(); }
+    const tex = new THREE.CanvasTexture(view.frame(0, IDLE_PHASE));
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.minFilter = THREE.LinearFilter;
+    c.face = new THREE.MeshLambertMaterial({ map: tex, transparent: true, alphaTest: 0.4, side: THREE.DoubleSide });
     c.side.color.set(view.color);
-    const sprite = view.sprites[0];
-    const maxH = 140, maxW = 200;
-    const scale = Math.min(1, maxH / sprite.height, maxW / sprite.width);
-    c.w = (sprite.width * scale) / PPU;
-    c.h = (sprite.height * scale) / PPU;
+    const maxH = 180, maxW = 260;
+    const scale = Math.min(1, maxH / view.height, maxW / view.width);
+    c.w = (view.width * scale) / PPU;
+    c.h = (view.height * scale) / PPU;
     c.mesh.geometry.dispose();
     c.mesh.geometry = new THREE.BoxGeometry(c.w, c.h, CUTOUT_DEPTH);
     c.mesh.visible = true;
     c.shadow.visible = true;
     c.shadow.scale.set(c.w * 0.9, c.w * 0.35, 1);
     c.view = view;
-    this.applyPose(c, IDLE, 0, false);
+    this.applyPose(c, IDLE, IDLE_PHASE, 0, false);
   }
 
-  private applyPose(c: Cutout, pose: Pose, t: number, flash: boolean): void {
-    if (!c.view) return;
-    const variant = c.mats[boilIndex(t, c.mats.length)];
+  private applyPose(c: Cutout, pose: Pose, phase: Phase, t: number, flash: boolean): void {
+    if (!c.view || !c.face) return;
+    // Re-rasterise the doodle with limbs posed for this phase; the texture shares the canvas.
+    c.view.frame(t, phase);
+    c.face.map!.needsUpdate = true;
     // Box material order: +x, -x, +y, -y, +z (front), -z (back).
-    c.mesh.material = [c.side, c.side, c.side, c.side, variant, variant];
-    variant.emissive.set(flash ? 0xffffff : 0x000000);
-    variant.emissiveIntensity = flash ? 0.9 : 0;
+    c.mesh.material = [c.side, c.side, c.side, c.side, c.face, c.face];
+    c.face.emissive.set(flash ? 0xffffff : 0x000000);
+    c.face.emissiveIntensity = flash ? 0.9 : 0;
     c.mesh.scale.set(pose.sx, pose.sy, 1);
     // Keep the feet on the ground: box is centred, so lift by half the scaled height.
     c.mesh.position.set(pose.dx / PPU, (c.h * pose.sy) / 2 - pose.dy / PPU, 0);
@@ -138,8 +139,8 @@ export class Arena3D implements ArenaRenderer {
   draw(s: ReplayState): void {
     this.a.group.position.x = s.xA / PPU - 3;
     this.b.group.position.x = s.xB / PPU - 3;
-    this.applyPose(this.a, s.poseA, s.t, s.flashA);
-    this.applyPose(this.b, s.poseB, s.t, s.flashB);
+    this.applyPose(this.a, s.poseA, s.phaseA, s.t, s.flashA);
+    this.applyPose(this.b, s.poseB, s.phaseB, s.t, s.flashB);
     // Camera shake and a slow drift so the scene feels filmed, not static.
     const sh = s.shake / PPU;
     this.camera.position.set(

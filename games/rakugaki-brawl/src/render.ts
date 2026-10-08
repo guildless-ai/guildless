@@ -1,4 +1,7 @@
+import { limbPoseOf, type Phase } from './anim.js';
+import { posedDrawing, segmentParts, type Parts } from './parts.js';
 import { mulberry32 } from './rng.js';
+import { boilIndex } from './view.js';
 import type { Drawing, Stroke } from './types.js';
 
 export const CSS: Record<Stroke['color'], string> = {
@@ -51,4 +54,48 @@ export function toSpriteVariants(d: Drawing, bbox: { x: number; y: number; w: nu
     out.push(toSprite(jittered, { x: bbox.x - jitter, y: bbox.y - jitter, w: bbox.w + jitter * 2, h: bbox.h + jitter * 2 }));
   }
   return out;
+}
+
+/** Nudge every point by up to `jitter` px, deterministically per variant index. */
+export function jitterDrawing(d: Drawing, jitter: number, variant: number): Drawing {
+  const rand = mulberry32(1000 + variant);
+  return {
+    ...d,
+    strokes: d.strokes.map((s) => ({ ...s, points: s.points.map((p) => ({ x: p.x + (rand() - 0.5) * 2 * jitter, y: p.y + (rand() - 0.5) * 2 * jitter })) })),
+  };
+}
+
+export interface FrameFactory {
+  width: number;
+  height: number;
+  parts: Parts;
+  frame(t: number, phase: Phase): HTMLCanvasElement;
+}
+
+/**
+ * Build a frame renderer for a doodle: limbs are rotated per phase, the
+ * result is jittered for the hand-drawn boil, then rasterised into a
+ * fixed-size canvas (bbox padded so swinging limbs stay inside).
+ */
+export function makeFrameFactory(d: Drawing, bbox: { x: number; y: number; w: number; h: number }, boilVariants = 3, jitter = 1.3): FrameFactory {
+  const parts = segmentParts(d);
+  const padX = bbox.w * 0.3 + jitter, padTop = bbox.h * 0.3 + jitter, padBottom = jitter + 2;
+  const box = { x: bbox.x - padX, y: bbox.y - padTop, w: bbox.w + padX * 2, h: bbox.h + padTop + padBottom };
+  const width = Math.max(1, Math.ceil(box.w)), height = Math.max(1, Math.ceil(box.h));
+  const canvas = document.createElement('canvas');
+  canvas.width = width; canvas.height = height;
+  const ctx = canvas.getContext('2d')!;
+  return {
+    width, height, parts,
+    frame(t, phase) {
+      const limbs = limbPoseOf(phase, parts.legs.length, parts.arms.length);
+      const posed = posedDrawing(d, parts, limbs);
+      const boiled = jitterDrawing(posed, jitter, boilIndex(t, boilVariants));
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, width, height);
+      ctx.translate(-box.x, -box.y);
+      drawDrawing(ctx, boiled);
+      return canvas;
+    },
+  };
 }

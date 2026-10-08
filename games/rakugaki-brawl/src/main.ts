@@ -1,12 +1,12 @@
 import { analyze, totalInk } from './analyze.js';
-import { poseAt } from './anim.js';
+import { phaseAt, poseOf } from './anim.js';
 import { Arena2D } from './arena2d.js';
 import { Arena3D } from './arena3d.js';
 import { ARENA_W, makeFighter, simulate, type BattleEvent, type Fighter } from './battle.js';
 import { generateEnemy } from './enemy.js';
 import { loadGallery, pickRival, saveWinner } from './gallery.js';
 import { applyPerks, offerPerks, type Perk } from './perks.js';
-import { CSS, drawDrawing, toSpriteVariants } from './render.js';
+import { CSS, drawDrawing, makeFrameFactory } from './render.js';
 import { mulberry32 } from './rng.js';
 import { applyResult, inkBudget, MAX_ROUNDS, newRun, type RunState } from './run.js';
 import { decodeDrawing, encodeDrawing } from './share.js';
@@ -109,7 +109,8 @@ $('next').onclick = () => startRound(false);
 
 // ---------- battle ----------
 function viewOf(f: Fighter): FighterView {
-  return { name: f.name, color: CSS[f.stats.element], sprites: toSpriteVariants(f.drawing, f.stats.bbox) };
+  const ff = makeFrameFactory(f.drawing, f.stats.bbox);
+  return { name: f.name, color: CSS[f.stats.element], width: ff.width, height: ff.height, frame: ff.frame };
 }
 
 $('fight').onclick = () => {
@@ -191,10 +192,10 @@ function replay(a: Fighter, b: Fighter, events: BattleEvent[], done: () => void)
     flashLife = Math.max(0, flashLife - dt);
     for (const p of popups) p.life -= dt * 0.9;
     while (popups.length && popups[0].life <= 0) popups.shift();
+    const phaseA = phaseAt(events, 'a', t, movedA), phaseB = phaseAt(events, 'b', t, movedB);
     renderer.draw({
       t, xA, xB,
-      poseA: poseAt(events, 'a', t, movedA),
-      poseB: poseAt(events, 'b', t, movedB),
+      poseA: poseOf(phaseA), poseB: poseOf(phaseB), phaseA, phaseB,
       hpA, hpB, hpA0, hpB0, popups, shake,
       flashA: flash === 'a' && flashLife > 0,
       flashB: flash === 'b' && flashLife > 0,
