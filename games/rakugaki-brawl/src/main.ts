@@ -7,6 +7,7 @@ import { generateEnemy } from './enemy.js';
 import { afterWave, idleBudget, loadIdle, newIdle, saveIdle, type IdleState } from './idle.js';
 import { loadGallery, pickRival, saveWinner } from './gallery.js';
 import { applyPerks, offerPerks, type Perk } from './perks.js';
+import { ACHIEVEMENTS, bankIdleTokens, LocalPlatform, spendTokens, type AchievementId } from './platform.js';
 import { CSS, drawDrawing, makeFrameFactory } from './render.js';
 import { mulberry32 } from './rng.js';
 import { applyResult, inkBudget, MAX_ROUNDS, newRun, type RunState } from './run.js';
@@ -30,6 +31,7 @@ let color: Color = 'black';
 let penWidth = 8;
 let enemy = generateEnemy(run.round, inkBudget(run.round), run.seed);
 const sfx = new Sfx();
+const platform = new LocalPlatform(localStorage);
 let busy = false;
 /** A doodle pasted from a share code; used as the next enemy instead of a generated one. */
 let challenger: { name: string; drawing: Drawing } | null = null;
@@ -117,6 +119,14 @@ const palette = $('palette');
   palette.appendChild(b);
 });
 
+/** A fresh run that carries banked idle-mode ink tokens as 'ink' perks. */
+function startRunWithTokens(): RunState {
+  const n = spendTokens(localStorage);
+  const r = newRun();
+  if (n > 0) r.perks = Array.from({ length: n }, () => 'ink' as const);
+  return r;
+}
+
 // ---------- idle (second-monitor) mode ----------
 let idle: IdleState | null = null;
 let idleTimer = 0;
@@ -164,8 +174,12 @@ function idleWave(): void {
     busy = false;
     banner(null);
     if (!idle) return;
+    const prevWins = idle.wins;
     idle = afterWave(idle, result.winner);
     saveIdle(localStorage, idle);
+    const tokens = bankIdleTokens(localStorage, prevWins, idle.wins);
+    if (idle.streak >= 5) achieve('idle_streak_5');
+    $('idletokens').textContent = tokens ? `インク壺 ×${tokens}（次のランで使う）` : '';
     $('idlestats').textContent = `wave ${idle.wave} ・ ${idle.wins} 勝 ・ 連勝 ${idle.streak}（最高 ${idle.bestStreak}）`;
     idleTimer = window.setTimeout(idleWave, 1200);
   });
@@ -184,7 +198,11 @@ if (desktop) {
 
 $('undo').onclick = () => { drawing.strokes.pop(); redrawPad(); };
 $('clear').onclick = () => { drawing.strokes = []; redrawPad(); };
-$('restart').onclick = () => { run = newRun(); startRound(true); };
+$('restart').onclick = () => {
+  run = startRunWithTokens();
+  startRound(true); // clears the log, so report the carried tokens afterwards
+  if (run.perks.length) log(`放置モードの報酬: インク壺 ×${run.perks.length} を持ち込み`);
+};
 $('next').onclick = () => startRound(false);
 
 // ---------- battle ----------
@@ -207,7 +225,15 @@ $('fight').onclick = () => {
     run = applyResult(run, result.winner);
     log(result.winner === 'a' ? '勝ち！' : result.winner === 'b' ? '負け…' : '相打ち');
     banner(null);
-    if (result.winner === 'a') saveWinner(localStorage, a.drawing, wonRound);
+    if (result.winner === 'a') {
+      saveWinner(localStorage, a.drawing, wonRound);
+      achieve('first_win');
+      const t = a.stats.traits;
+      if (a.stats.armor > 0 && t.eyes > 0 && t.legs > 0 && t.arms > 0) achieve('full_creature');
+      if (enemy.name.startsWith('むかしの自分')) achieve('beat_rival');
+      if (run.over && run.lives > 0) achieve('clear_run');
+    }
+    if (enemy.name === 'ともだちの絵') achieve('share_fight');
     busy = false;
     updateStatus();
     if (run.over) {
@@ -315,6 +341,18 @@ function hud(nameA: string, nameB: string, colA: string, colB: string, ratioA: n
   $('nameA').textContent = nameA; $('nameB').textContent = nameB;
   $('hpA').style.width = `${Math.max(0, ratioA) * 100}%`; $('hpA').style.background = colA;
   $('hpB').style.width = `${Math.max(0, ratioB) * 100}%`; $('hpB').style.background = colB;
+}
+
+/** Unlock an achievement and toast it the first time. */
+function achieve(id: AchievementId): void {
+  if (!platform.unlock(id)) return;
+  const a = ACHIEVEMENTS[id];
+  log(`実績解除: ${a.name} ― ${a.desc}`);
+  const el = $('toast');
+  el.textContent = `実績解除　${a.name}`;
+  el.hidden = false;
+  el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  window.setTimeout(() => { el.hidden = true; }, 2600);
 }
 
 function log(line: string): void {

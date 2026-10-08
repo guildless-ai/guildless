@@ -43,6 +43,9 @@
   body.idle #idlebar { display:flex; }
   #idlebar { display:none; justify-content:space-between; font-size:12px; color:var(--muted); margin-top:4px; }
   .banner { position:absolute; left:0; right:0; top:28%; text-align:center; font-size:44px; font-weight:900; pointer-events:none; text-shadow: 3px 3px 0 #fff, -2px -2px 0 #fff, 2px -2px 0 #fff, -2px 2px 0 #fff; }
+  .toast { position:absolute; left:50%; top:8px; transform:translateX(-50%); background:#222; color:#fff; padding:6px 14px; border-radius:999px; font-size:13px; pointer-events:none; opacity:0; }
+  .toast.show { animation: toast 2.6s ease both; }
+  @keyframes toast { 0% { opacity:0; transform:translate(-50%,-10px) } 10%,80% { opacity:1; transform:translate(-50%,0) } 100% { opacity:0 } }
   .banner.pop { animation: pop .45s cubic-bezier(.2,1.6,.4,1) both; }
   @keyframes pop { from { transform: scale(.3) rotate(-8deg); opacity:0 } to { transform: scale(1) rotate(-3deg); opacity:1 } }
   .perk { flex:1; min-width:120px; text-align:left; }
@@ -82,6 +85,7 @@
     <div class="stage">
       <canvas id="arena" width="480" height="300"></canvas>
       <div id="banner" class="banner" hidden></div>
+      <div id="toast" class="toast" hidden></div>
     </div>
     <div class="stats" id="enemystats"></div>
     <div id="perks" class="row" hidden></div>
@@ -92,7 +96,7 @@
       <button id="idlewindow" hidden title="常に最前面の細長ウィンドウで放置モードを開く">放置ウィンドウ</button>
     </div>
     <div id="log"></div>
-    <div id="idlebar"><span id="idlestats"></span><button id="idleexit">描くに戻る</button></div>
+    <div id="idlebar"><span id="idlestats"></span><span id="idletokens"></span><button id="idleexit">描くに戻る</button></div>
     <details style="margin-top:8px">
       <summary class="hint">友だちと対戦（共有コード）</summary>
       <div class="row"><button id="copycode">今の絵のコードをコピー</button><span id="copied" class="hint"></span></div>
