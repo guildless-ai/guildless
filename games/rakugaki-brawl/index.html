@@ -95,10 +95,11 @@
       <button id="idle" title="画面端に置いて作業しながら眺める">放置モード</button>
       <button id="idlewindow" hidden title="常に最前面の細長ウィンドウで放置モードを開く">放置ウィンドウ</button>
     </div>
+    <div class="row"><span class="hint">音量</span><input id="volume" type="range" min="0" max="100" step="5" style="width:140px" /><span id="volumelabel" class="hint"></span></div>
     <div id="summary" hidden>
       <div class="row"><strong>今回のラン</strong><span class="hint">使った絵と戦績。SNS 用の 1200×630 画像</span></div>
       <canvas id="summarycard" width="1200" height="630"></canvas>
-      <div class="row"><button id="savecard">画像を保存</button><button id="copycard">画像をコピー</button><span id="cardmsg" class="hint"></span></div>
+      <div class="row"><button id="savecard">画像を保存</button><button id="copycard">画像をコピー</button><button id="sharelink" hidden title="この絵と対戦できるリンク。画像と一緒に投稿する">対戦リンクをコピー</button><span id="cardmsg" class="hint"></span></div>
     </div>
     <div id="log"></div>
     <div id="idlebar"><span id="idlestats"></span><span id="idletokens"></span><button id="idleexit">描くに戻る</button></div>

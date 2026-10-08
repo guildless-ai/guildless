@@ -101,3 +101,10 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
 }
+
+/** The doodle worth sharing: the last winner, else the last one used. */
+export function pickShareDoodle(history: RoundRecord[]): RoundRecord | null {
+  if (history.length === 0) return null;
+  for (let i = history.length - 1; i >= 0; i--) if (history[i].result === 'win') return history[i];
+  return history[history.length - 1];
+}

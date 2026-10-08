@@ -14,7 +14,7 @@ import { applyResult, inkBudget, MAX_ROUNDS, newRun, type RunState } from './run
 import { decodeDrawing, encodeDrawing } from './share.js';
 import { segmentParts } from './parts.js';
 import { Sfx } from './sfx.js';
-import { renderSummaryCard, type RoundRecord } from './summary.js';
+import { pickShareDoodle, renderSummaryCard, type RoundRecord } from './summary.js';
 import type { Color, Drawing, Point, Stats, Stroke } from './types.js';
 import type { ArenaRenderer, FighterView, Popup } from './view.js';
 
@@ -131,6 +131,16 @@ function showSummary(): void {
     a.href = card.toDataURL('image/png');
     a.click();
   };
+  const best = pickShareDoodle(history);
+  const linkBtn = $<HTMLButtonElement>('sharelink');
+  linkBtn.hidden = !best;
+  linkBtn.onclick = async () => {
+    if (!best) return;
+    // A link that opens the game with this doodle as the challenger.
+    const url = `${location.origin}${location.pathname}?code=${encodeDrawing(best.drawing)}`;
+    try { await navigator.clipboard.writeText(url); $('cardmsg').textContent = `対戦リンクをコピーした (${url.length}文字)`; }
+    catch { $<HTMLInputElement>('pastecode').value = url; $('cardmsg').textContent = 'リンクを下の欄に出した'; }
+  };
   $('copycard').onclick = async () => {
     try {
       const blob = await new Promise<Blob | null>((res) => card.toBlob(res, 'image/png'));
@@ -207,6 +217,14 @@ function idleWave(): void {
     $('idlestats').textContent = `wave ${idle.wave} ・ ${idle.wins} 勝 ・ 連勝 ${idle.streak}（最高 ${idle.bestStreak}）`;
     idleTimer = window.setTimeout(idleWave, 1200);
   });
+}
+
+// ---------- volume ----------
+{
+  const slider = $<HTMLInputElement>('volume');
+  slider.value = String(Math.round(sfx.volume * 100));
+  slider.oninput = () => { sfx.setVolume(Number(slider.value) / 100); $('volumelabel').textContent = sfx.volume === 0 ? 'ミュート' : `${Math.round(sfx.volume * 100)}%`; };
+  $('volumelabel').textContent = sfx.volume === 0 ? 'ミュート' : `${Math.round(sfx.volume * 100)}%`;
 }
 
 $('idle').onclick = enterIdle;
@@ -458,7 +476,17 @@ function updateStatus(): void {
 }
 
 startRound(true);
-if (new URLSearchParams(location.search).has('idle')) enterIdle();
+{
+  const params = new URLSearchParams(location.search);
+  const code = params.get('code');
+  if (code) {
+    try {
+      const d = decodeDrawing(code);
+      if (d.strokes.length) { challenger = { name: 'ともだちの絵', drawing: d }; log('リンクの絵が次の相手'); startRound(false, true); }
+    } catch { log('リンクのコードを読めない'); }
+  }
+  if (params.has('idle')) enterIdle();
+}
 
 // Debug surface for automated tests: inspect the current doodle's segmentation.
 (window as unknown as { __rakugaki: unknown }).__rakugaki = {

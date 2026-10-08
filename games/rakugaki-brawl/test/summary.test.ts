@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { newRun } from '../src/run.js';
-import { CARD_H, CARD_W, cardLayout, cardTitle, type RoundRecord } from '../src/summary.js';
+import { CARD_H, CARD_W, cardLayout, cardTitle, pickShareDoodle, type RoundRecord } from '../src/summary.js';
 
 const rec = (round: number, result: RoundRecord['result']): RoundRecord => ({ round, result, enemyName: 'x', drawing: { width: 480, height: 360, strokes: [] } });
 
@@ -23,4 +23,12 @@ test('card title distinguishes a full clear from a game over', () => {
   assert.equal(cardTitle(r, full), '完走！ 10勝');
   const dead = { ...r, lives: 0 };
   assert.equal(cardTitle(dead, [rec(1, 'win'), rec(2, 'lose'), rec(3, 'lose'), rec(4, 'lose')]), '4ラウンド 1勝で力尽きた');
+});
+
+test('pickShareDoodle prefers the last winner, else the last used', () => {
+
+  assert.equal(pickShareDoodle([]), null);
+  assert.equal(pickShareDoodle([rec(1, 'win'), rec(2, 'lose'), rec(3, 'lose')])?.round, 1);
+  assert.equal(pickShareDoodle([rec(1, 'win'), rec(2, 'win'), rec(3, 'lose')])?.round, 2);
+  assert.equal(pickShareDoodle([rec(1, 'lose'), rec(2, 'lose')])?.round, 2);
 });
