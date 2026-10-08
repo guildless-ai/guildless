@@ -1,3 +1,4 @@
+import { isClosedLoop, segmentParts, strokeBBox, traits as readTraits } from './parts.js';
 import type { Color, Drawing, Point, Stats, Stroke } from './types.js';
 
 /** Ink cost of a stroke: path length times pen width. */
@@ -77,15 +78,26 @@ export function dominantColor(drawing: Drawing): Color {
  */
 export function analyze(drawing: Drawing): Stats {
   const ink = totalInk(drawing);
-  const spikes = drawing.strokes.reduce((n, s) => n + countSpikes(s), 0);
+  // Tiny closed loops (eyes, buttons) are not blades: their corners do not count.
+  const spikes = drawing.strokes.reduce((n, s) => {
+    const bb = strokeBBox(s);
+    if (isClosedLoop(s) && Math.max(bb.w, bb.h) < 40) return n;
+    return n + countSpikes(s);
+  }, 0);
   const bbox = boundingBox(drawing);
+  const tr = readTraits(drawing, segmentParts(drawing));
   const hp = Math.round(20 + ink / 20);
   // Bigger doodles also hit harder so late rounds do not stall on the time limit.
-  const atk = Math.round(3 + spikes * 1.6 + bbox.h / 40 + ink / 400);
+  // Each arm adds a little attack (max 4 arms).
+  const atk = Math.round(3 + spikes * 1.6 + bbox.h / 40 + ink / 400 + Math.min(4, tr.arms) * 2);
   // Heavier doodles swing slower. 0.6 .. 2.4 attacks per second (6000 ink = 1.65/s).
-  const spd = clamp(2.4 - ink / 8000, 0.6, 2.4);
+  // Each leg adds 0.1/s (max 4 legs).
+  const spd = clamp(2.4 - ink / 8000 + Math.min(4, tr.legs) * 0.1, 0.6, 2.8);
   const reach = Math.round(14 + bbox.w / 5);
-  return { hp, atk, spd: round2(spd), reach, ink: Math.round(ink), spikes, element: dominantColor(drawing), bbox };
+  // Closed loops are shields: flat damage reduction per hit, max 3. Eyes sharpen crits.
+  const armor = Math.min(3, tr.loops);
+  const critBonus = tr.eyes >= 2 ? 0.08 : tr.eyes === 1 ? 0.04 : 0;
+  return { hp, atk, spd: round2(spd), reach, ink: Math.round(ink), spikes, element: dominantColor(drawing), bbox, armor, critBonus, traits: tr };
 }
 
 export function clamp(v: number, lo: number, hi: number): number {

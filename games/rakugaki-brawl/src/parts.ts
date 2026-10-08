@@ -90,8 +90,9 @@ export function segmentParts(d: Drawing): Parts {
     if (bodyIdx.has(i) || s.points.length < 2) return;
     const b = boxes[i];
     const bottom = b.y + b.h;
-    const hangsBelow = bottom > body.y + body.h + body.h * 0.1;
-    const attachedNear = b.y <= body.y + body.h + body.h * 0.15;
+    // Margins scale with the body but never collapse to zero for flat bodies (a single line).
+    const hangsBelow = bottom > body.y + body.h + Math.max(6, body.h * 0.1);
+    const attachedNear = b.y <= body.y + body.h + Math.max(12, body.h * 0.15);
     const tallish = b.h >= b.w * 0.6;
     const cx = b.x + b.w / 2;
     const side: 1 | -1 = cx >= bodyCx ? 1 : -1;
@@ -134,4 +135,38 @@ export function posedDrawing(d: Drawing, parts: Parts, pose: LimbPose): Drawing 
       return { ...s, points: s.points.map((p) => rotateAround(p, pivot, -a)) };
     }),
   };
+}
+
+/** Legible bonuses read off the doodle's shapes; shown to the player as tags. */
+export interface Traits {
+  /** Closed loops that are not eyes (the body ring counts). Each adds armour. */
+  loops: number;
+  /** Small closed loops inside the body: up to 2 count as eyes. */
+  eyes: number;
+  legs: number;
+  arms: number;
+}
+
+export function isClosedLoop(s: Stroke): boolean {
+  if (s.points.length < 6) return false;
+  const a = s.points[0], b = s.points[s.points.length - 1];
+  const bb = strokeBBox(s);
+  if (bb.w < 8 || bb.h < 8) return false;
+  const gap = Math.hypot(a.x - b.x, a.y - b.y);
+  return gap <= Math.max(14, s.width * 2, Math.min(bb.w, bb.h) * 0.25);
+}
+
+export function traits(d: Drawing, parts: Parts): Traits {
+  let loops = 0, eyes = 0;
+  const body = parts.body;
+  d.strokes.forEach((s) => {
+    if (!isClosedLoop(s)) return;
+    const bb = strokeBBox(s);
+    const cx = bb.x + bb.w / 2, cy = bb.y + bb.h / 2;
+    const inside = cx > body.x && cx < body.x + body.w && cy > body.y && cy < body.y + body.h;
+    const small = bb.w <= body.w * 0.35 && bb.h <= body.h * 0.35 && (bb.w < body.w || bb.h < body.h);
+    if (inside && small && eyes < 2) eyes++;
+    else loops++;
+  });
+  return { loops, eyes, legs: parts.legs.length, arms: parts.arms.length };
 }

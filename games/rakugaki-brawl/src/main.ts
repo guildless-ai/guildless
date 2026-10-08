@@ -81,7 +81,18 @@ function renderStats(el: HTMLElement, s: Stats | null): void {
   el.innerHTML = [
     `<div>HP ${s.hp}</div>`, `<div>攻撃 ${s.atk}</div>`, `<div>速さ ${s.spd}/s</div>`,
     `<div>リーチ ${s.reach}</div>`, `<div style="color:${CSS[s.element]}">属性 ${jp(s.element)} (トゲ${s.spikes})</div>`,
+    `<div style="grid-column: 1 / -1">${traitTags(s)}</div>`,
   ].join('');
+}
+
+/** Human-readable tags for shape traits so players learn what drawing choices do. */
+function traitTags(s: Stats): string {
+  const tags: string[] = [];
+  if (s.armor > 0) tags.push(`盾${s.armor}（輪 → 被ダメ -${s.armor}）`);
+  if (s.traits.eyes > 0) tags.push(`目${s.traits.eyes}（クリ +${Math.round(s.critBonus * 100)}%）`);
+  if (s.traits.legs > 0) tags.push(`脚${s.traits.legs}（速さ +${(Math.min(4, s.traits.legs) * 0.1).toFixed(1)}）`);
+  if (s.traits.arms > 0) tags.push(`腕${s.traits.arms}（攻撃 +${Math.min(4, s.traits.arms) * 2}）`);
+  return tags.length ? tags.join(' ・ ') : '形の特性なし（輪・目・脚・腕を描くと付く）';
 }
 
 function jp(c: Color): string {

@@ -28,4 +28,9 @@ export interface Stats {
   spikes: number;
   element: Color;
   bbox: { x: number; y: number; w: number; h: number };
+  /** Flat damage reduction per hit taken (from closed loops). */
+  armor: number;
+  /** Added to the attacker's crit chance (from eyes). */
+  critBonus: number;
+  traits: { loops: number; eyes: number; legs: number; arms: number };
 }

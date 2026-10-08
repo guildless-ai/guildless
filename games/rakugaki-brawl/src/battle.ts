@@ -83,9 +83,10 @@ export function simulate(a: Fighter, b: Fighter, seed = 1): BattleResult {
 
 function attack(from: Fighter, to: Fighter, who: 'a' | 'b', t: number, rand: () => number): BattleEvent {
   const mult = elementMultiplier(from.stats.element, to.stats.element);
-  const crit = rand() < from.critChance;
+  const crit = rand() < from.critChance + from.stats.critBonus;
   const variance = 0.85 + rand() * 0.3;
-  const dmg = Math.max(1, Math.round(from.stats.atk * mult * variance * (crit ? 2 : 1)));
+  const raw = Math.round(from.stats.atk * mult * variance * (crit ? 2 : 1));
+  const dmg = Math.max(1, raw - to.stats.armor);
   to.hp = Math.max(0, to.hp - dmg);
   return { t, kind: 'hit', from: who, dmg, crit, mult };
 }
