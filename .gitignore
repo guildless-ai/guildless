@@ -8,3 +8,4 @@ coverage/
 /outputs/
 __pycache__/
 *.pyc
+release/

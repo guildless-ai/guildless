@@ -174,6 +174,14 @@ function idleWave(): void {
 $('idle').onclick = enterIdle;
 $('idleexit').onclick = exitIdle;
 
+// Inside the Electron shell a separate always-on-top strip window is available.
+const desktop = (window as unknown as { rakugakiDesktop?: { openIdle(): void; closeIdle(): void } }).rakugakiDesktop;
+if (desktop) {
+  const b = $<HTMLButtonElement>('idlewindow');
+  b.hidden = false;
+  b.onclick = () => desktop.openIdle();
+}
+
 $('undo').onclick = () => { drawing.strokes.pop(); redrawPad(); };
 $('clear').onclick = () => { drawing.strokes = []; redrawPad(); };
 $('restart').onclick = () => { run = newRun(); startRound(true); };

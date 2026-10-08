@@ -41,8 +41,21 @@ npm run build    # 型チェック + 本番ビルド (dist/)
 
 「放置モード」ボタン、または `?idle` 付き URL で起動。UI を畳んで 960×220 の横長ストリップにし、今の絵（無ければギャラリーの過去作）が生成敵の無限ウェーブと戦い続ける。2ウェーブごとに敵の予算が上がり、ラウンド10相当で頭打ち。wave・勝数・連勝・最高連勝は localStorage に保存され、次回も続きから。音は鳴らさない。Rusty's Retirement 型の「作業中に画面端で動く」導線（`src/idle.ts`）。
 
+## デスクトップ版（Electron）
+
+```sh
+npm run electron      # 開発: dist/ を読み込むので先に npm run build
+npm run dist:win      # electron-builder で Windows 用 nsis / zip を release/ に出力
+npm run dist:mac      # dmg
+npm run dist:linux    # AppImage
+```
+
+`electron/main.cjs` がメインウィンドウを開き、「放置ウィンドウ」ボタン（Electron 内でのみ表示）で、作業領域の最下部に幅いっぱい・高さ260px・常に最前面・枠なしのストリップウィンドウを `?idle=1` で開く。レンダラーは `contextIsolation` + `sandbox` 有効で、プリロードは「放置ウィンドウを開く／閉じる」だけを公開する。Vite は `base: './'` で file:// から読める。`RAKUGAKI_SMOKE=1` で起動すると両ウィンドウを開いて状態を JSON 出力して終了する（CI 用）。
+
+Steam 配布時は steamworks.js を Electron のメインプロセスに足し、実績とクラウドセーブ（ギャラリーと放置の進捗）をつなぐ。
+
 ## 次にやること
 
-1. Electron + steamworks.js で Steam 配布（放置モードは常に最前面の細長ウィンドウに）
+1. steamworks.js 統合（実績・クラウドセーブ）とストアページ素材
 2. 音量設定・ミュート
 3. 放置モードの報酬（連勝でインク壺などの強化を持ち帰る）
