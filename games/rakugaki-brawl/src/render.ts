@@ -1,3 +1,4 @@
+import { mulberry32 } from './rng.js';
 import type { Drawing, Stroke } from './types.js';
 
 export const CSS: Record<Stroke['color'], string> = {
@@ -33,4 +34,21 @@ export function toSprite(d: Drawing, bbox: { x: number; y: number; w: number; h:
   ctx.translate(-bbox.x, -bbox.y);
   drawDrawing(ctx, d);
   return c;
+}
+
+/**
+ * Hand-drawn "boil": a few copies of the sprite with every point nudged by
+ * up to `jitter` px. Cycling them at ~8 fps makes a static doodle look alive.
+ */
+export function toSpriteVariants(d: Drawing, bbox: { x: number; y: number; w: number; h: number }, count = 3, jitter = 1.3, seed = 7): HTMLCanvasElement[] {
+  const rand = mulberry32(seed);
+  const out: HTMLCanvasElement[] = [];
+  for (let i = 0; i < count; i++) {
+    const jittered: Drawing = {
+      ...d,
+      strokes: d.strokes.map((s) => ({ ...s, points: s.points.map((p) => ({ x: p.x + (rand() - 0.5) * 2 * jitter, y: p.y + (rand() - 0.5) * 2 * jitter })) })),
+    };
+    out.push(toSprite(jittered, { x: bbox.x - jitter, y: bbox.y - jitter, w: bbox.w + jitter * 2, h: bbox.h + jitter * 2 }));
+  }
+  return out;
 }

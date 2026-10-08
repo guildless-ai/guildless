@@ -30,6 +30,12 @@
   .stats div { background:#f1ede2; padding:4px 6px; border-radius:6px; }
   #log { font-size:13px; max-height:120px; overflow:auto; background:#f1ede2; padding:8px; border-radius:8px; white-space:pre-line; }
   .hint { font-size:12px; color:var(--muted); }
+  .hud { display:flex; justify-content:space-between; gap:12px; margin-bottom:6px; font-size:12px; }
+  .hpbox { flex:1; }
+  .hpbox.right { text-align:right; }
+  .hp { height:10px; background:#ddd; border:1px solid var(--ink); border-radius:5px; overflow:hidden; }
+  .hpbox.right .hp { direction: rtl; }
+  .hp > i { display:block; height:100%; background:var(--ink); transition:width .08s; }
   .perk { flex:1; min-width:120px; text-align:left; }
   .perk small { display:block; color:var(--muted); }
 </style>
@@ -59,7 +65,11 @@
     <p class="hint">太く塗る→HP / トゲ・角→攻撃 / 軽い→素早さ / 横に長い→リーチ。色は相性: 赤&gt;緑&gt;青&gt;赤、黒は無属性。</p>
   </section>
   <section>
-    <div class="row"><strong>バトル</strong><span id="roundinfo" class="hint"></span></div>
+    <div class="row"><strong>バトル</strong><span id="roundinfo" class="hint"></span><span id="rendermode" class="hint"></span></div>
+    <div class="hud">
+      <div class="hpbox"><span id="nameA"></span><div class="hp"><i id="hpA"></i></div></div>
+      <div class="hpbox right"><span id="nameB"></span><div class="hp"><i id="hpB"></i></div></div>
+    </div>
     <canvas id="arena" width="480" height="300"></canvas>
     <div class="stats" id="enemystats"></div>
     <div id="perks" class="row" hidden></div>

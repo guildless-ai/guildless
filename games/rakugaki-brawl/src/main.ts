@@ -1,19 +1,24 @@
 import { analyze, totalInk } from './analyze.js';
+import { poseAt } from './anim.js';
+import { Arena2D } from './arena2d.js';
+import { Arena3D } from './arena3d.js';
 import { ARENA_W, makeFighter, simulate, type BattleEvent, type Fighter } from './battle.js';
 import { generateEnemy } from './enemy.js';
 import { loadGallery, pickRival, saveWinner } from './gallery.js';
 import { applyPerks, offerPerks, type Perk } from './perks.js';
-import { CSS, drawDrawing, toSprite } from './render.js';
+import { CSS, drawDrawing, toSpriteVariants } from './render.js';
 import { mulberry32 } from './rng.js';
-import { decodeDrawing, encodeDrawing } from './share.js';
 import { applyResult, inkBudget, MAX_ROUNDS, newRun, type RunState } from './run.js';
+import { decodeDrawing, encodeDrawing } from './share.js';
 import type { Color, Drawing, Point, Stats, Stroke } from './types.js';
+import type { ArenaRenderer, FighterView, Popup } from './view.js';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const pad = $<HTMLCanvasElement>('pad');
 const arena = $<HTMLCanvasElement>('arena');
 const padCtx = pad.getContext('2d')!;
-const arenaCtx = arena.getContext('2d')!;
+const renderer: ArenaRenderer = Arena3D.supported(arena) ? new Arena3D(arena) : new Arena2D(arena);
+$('rendermode').textContent = renderer instanceof Arena3D ? '3D' : '2D';
 
 let run: RunState = newRun();
 let drawing: Drawing = { strokes: [], width: pad.width, height: pad.height };
@@ -103,6 +108,10 @@ $('restart').onclick = () => { run = newRun(); startRound(true); };
 $('next').onclick = () => startRound(false);
 
 // ---------- battle ----------
+function viewOf(f: Fighter): FighterView {
+  return { name: f.name, color: CSS[f.stats.element], sprites: toSpriteVariants(f.drawing, f.stats.bbox) };
+}
+
 $('fight').onclick = () => {
   if (busy || drawing.strokes.length === 0) return;
   busy = true;
@@ -129,97 +138,79 @@ $('fight').onclick = () => {
   });
 };
 
-/** Replay the event log visually: fighters walk, bounce on hit, HP bars drain. */
+/**
+ * Replay the event log: fighters walk in, poses come from anim.ts, the
+ * renderer (3D paper cutouts or 2D fallback) draws each frame, the HUD is DOM.
+ */
 function replay(a: Fighter, b: Fighter, events: BattleEvent[], done: () => void): void {
-  const spriteA = toSprite(a.drawing, a.stats.bbox);
-  const spriteB = toSprite(b.drawing, b.stats.bbox);
+  renderer.setFighters(viewOf(a), viewOf(b));
   const hpA0 = a.stats.hp, hpB0 = b.stats.hp;
   let hpA = hpA0, hpB = hpB0;
   let xA = 60, xB = ARENA_W - 60;
   let i = 0;
-  const start = performance.now();
-  const bumps: { x: number; y: number; text: string; color: string; life: number }[] = [];
-  const speed = 1; // 1x realtime
-  let shake = 0;          // remaining screen-shake intensity in px
-  let flash: 'a' | 'b' | null = null; // fighter that was just hit
+  const popups: Popup[] = [];
+  let shake = 0;
+  let flash: 'a' | 'b' | null = null;
   let flashLife = 0;
-  let pauseUntil = 0;     // performance.now() until which the replay clock is frozen (hitstop)
-  let frozen = 0;         // accumulated hitstop time in seconds
-  let lastNow = start;
+  let pauseUntil = 0; // hitstop: replay clock frozen until this wall time
+  let frozen = 0;
+  let lastNow = performance.now();
+  const start = lastNow;
+  let finished = false;
+  let endAt = Infinity;
+  hud(a.name, b.name, CSS[a.stats.element], CSS[b.stats.element], 1, 1);
+
   const frame = (now: number) => {
-    if (now < pauseUntil) { frozen += (now - lastNow) / 1000; lastNow = now; drawArena(((now - start) / 1000 - frozen) * speed); requestAnimationFrame(frame); return; }
-    lastNow = now;
-    const t = ((now - start) / 1000 - frozen) * speed;
-    // advance events
-    while (i < events.length && events[i].t <= t) {
+    if (now < pauseUntil) { frozen += (now - lastNow) / 1000; lastNow = now; }
+    else lastNow = now;
+    const t = (now - start) / 1000 - frozen;
+    while (!finished && i < events.length && events[i].t <= t) {
       const ev = events[i++];
       if (ev.kind === 'hit') {
         const big = ev.crit || ev.mult > 1;
         shake = big ? 8 : 3;
         flash = ev.from === 'a' ? 'b' : 'a';
         flashLife = 0.12;
-        if (big) pauseUntil = now + 90; // hitstop on crits and super-effective hits
-        if (ev.from === 'a') { hpB -= ev.dmg; bumps.push({ x: xB, y: 110, text: (ev.crit ? '!! ' : '') + ev.dmg + (ev.mult > 1 ? ' 効果大' : ev.mult < 1 ? ' いまいち' : ''), color: CSS[a.stats.element], life: 1 }); }
-        else { hpA -= ev.dmg; bumps.push({ x: xA, y: 110, text: (ev.crit ? '!! ' : '') + ev.dmg + (ev.mult > 1 ? ' 効果大' : ev.mult < 1 ? ' いまいち' : ''), color: CSS[b.stats.element], life: 1 }); }
+        if (big) pauseUntil = now + 90;
+        const text = (ev.crit ? '!! ' : '') + ev.dmg + (ev.mult > 1 ? ' 効果大' : ev.mult < 1 ? ' いまいち' : '');
+        if (ev.from === 'a') { hpB -= ev.dmg; popups.push({ x: xB, text, color: CSS[a.stats.element], life: 1 }); }
+        else { hpA -= ev.dmg; popups.push({ x: xA, text, color: CSS[b.stats.element], life: 1 }); }
       } else {
-        drawArena();
-        setTimeout(done, 400);
-        return;
+        finished = true;
+        endAt = t + 0.9; // let the KO topple play out
       }
     }
-    // walk until within reach (mirrors simulation)
+    // Walk until within reach (mirrors the simulation).
     const gap = xB - xA;
     const dt = 1 / 60;
-    if (gap > a.stats.reach && gap > b.stats.reach) { xA += 90 * dt; xB -= 90 * dt; }
-    else { if (gap > a.stats.reach) xA += 90 * dt; if (gap > b.stats.reach) xB -= 90 * dt; }
-    drawArena(t);
+    let movedA = false, movedB = false;
+    if (!finished) {
+      if (gap > a.stats.reach) { xA += 90 * dt; movedA = true; }
+      if (gap > b.stats.reach) { xB -= 90 * dt; movedB = true; }
+    }
+    flashLife = Math.max(0, flashLife - dt);
+    for (const p of popups) p.life -= dt * 0.9;
+    while (popups.length && popups[0].life <= 0) popups.shift();
+    renderer.draw({
+      t, xA, xB,
+      poseA: poseAt(events, 'a', t, movedA),
+      poseB: poseAt(events, 'b', t, movedB),
+      hpA, hpB, hpA0, hpB0, popups, shake,
+      flashA: flash === 'a' && flashLife > 0,
+      flashB: flash === 'b' && flashLife > 0,
+    });
+    shake = Math.max(0, shake - 0.6);
+    hud(a.name, b.name, CSS[a.stats.element], CSS[b.stats.element], hpA / hpA0, hpB / hpB0);
+    if (t >= endAt) { done(); return; }
     requestAnimationFrame(frame);
   };
-
-  function drawArena(t = 0): void {
-    arenaCtx.setTransform(1, 0, 0, 1, 0, 0);
-    arenaCtx.clearRect(0, 0, arena.width, arena.height);
-    if (shake > 0) {
-      arenaCtx.translate((Math.random() - 0.5) * shake * 2, (Math.random() - 0.5) * shake * 2);
-      shake = Math.max(0, shake - 0.6);
-    }
-    arenaCtx.fillStyle = '#f1ede2';
-    arenaCtx.fillRect(0, 220, arena.width, 80);
-    const wobble = Math.sin(t * 12) * 3;
-    flashLife = Math.max(0, flashLife - 1 / 60);
-    const hitA = flash === 'a' && flashLife > 0, hitB = flash === 'b' && flashLife > 0;
-    blit(spriteA, xA + (hitA ? -6 : 0), 220 + wobble, 1, hitA);
-    blit(spriteB, xB + (hitB ? 6 : 0), 220 - wobble, -1, hitB);
-    bar(20, 16, hpA / hpA0, CSS[a.stats.element], a.name);
-    bar(ARENA_W - 180, 16, hpB / hpB0, CSS[b.stats.element], b.name);
-    for (const bmp of bumps) {
-      bmp.life -= 1 / 60; bmp.y -= 0.8;
-      if (bmp.life <= 0) continue;
-      arenaCtx.globalAlpha = Math.max(0, bmp.life);
-      arenaCtx.fillStyle = bmp.color; arenaCtx.font = 'bold 16px system-ui';
-      arenaCtx.textAlign = 'center'; arenaCtx.fillText(bmp.text, bmp.x, bmp.y);
-      arenaCtx.globalAlpha = 1;
-    }
-  }
-  function blit(sprite: HTMLCanvasElement, x: number, groundY: number, dir: 1 | -1, hit = false): void {
-    const maxH = 140, maxW = 200;
-    const scale = Math.min(1, maxH / sprite.height, maxW / sprite.width);
-    const w = sprite.width * scale, h = sprite.height * scale;
-    arenaCtx.save();
-    arenaCtx.translate(x, groundY);
-    arenaCtx.scale(dir, 1);
-    if (hit) { arenaCtx.globalAlpha = 0.5; arenaCtx.filter = 'brightness(2)'; }
-    arenaCtx.drawImage(sprite, -w / 2, -h, w, h);
-    arenaCtx.restore();
-  }
-  function bar(x: number, y: number, ratio: number, col: string, label: string): void {
-    arenaCtx.fillStyle = '#ddd'; arenaCtx.fillRect(x, y, 160, 12);
-    arenaCtx.fillStyle = col; arenaCtx.fillRect(x, y, 160 * Math.max(0, ratio), 12);
-    arenaCtx.strokeStyle = '#222'; arenaCtx.strokeRect(x, y, 160, 12);
-    arenaCtx.fillStyle = '#222'; arenaCtx.font = '12px system-ui'; arenaCtx.textAlign = 'left';
-    arenaCtx.fillText(label, x, y + 26);
-  }
   requestAnimationFrame(frame);
+}
+
+function hud(nameA: string, nameB: string, colA: string, colB: string, ratioA: number, ratioB: number): void {
+  $('nameA').textContent = nameA; $('nameB').textContent = nameB;
+  $('hpA').style.width = `${Math.max(0, ratioA) * 100}%`; $('hpA').style.background = colA;
+  $('hpB').style.width = `${Math.max(0, ratioB) * 100}%`; $('hpB').style.background = colB;
 }
 
 function log(line: string): void {
@@ -282,16 +273,10 @@ function startRound(fresh: boolean, keepDrawing = false): void {
       : generateEnemy(run.round, inkBudget(run.round), run.seed);
   }
   $<HTMLButtonElement>('next').disabled = true;
-  // preview enemy in arena
-  const es = analyze(enemy.drawing);
-  renderStats($('enemystats'), es);
-  arenaCtx.setTransform(1, 0, 0, 1, 0, 0);
-  arenaCtx.clearRect(0, 0, arena.width, arena.height);
-  const sprite = toSprite(enemy.drawing, es.bbox);
-  const scale = Math.min(1, 140 / sprite.height, 200 / sprite.width);
-  arenaCtx.drawImage(sprite, ARENA_W - 60 - (sprite.width * scale) / 2, 220 - sprite.height * scale, sprite.width * scale, sprite.height * scale);
-  arenaCtx.fillStyle = '#222'; arenaCtx.font = '14px system-ui'; arenaCtx.textAlign = 'center';
-  arenaCtx.fillText(`次の相手: ${enemy.name}`, ARENA_W - 60, 250);
+  const b = makeFighter(enemy.name, enemy.drawing, ARENA_W - 60);
+  renderStats($('enemystats'), b.stats);
+  renderer.preview(viewOf(b), ARENA_W - 60);
+  hud('', `次の相手: ${enemy.name}`, '#222', CSS[b.stats.element], 0, 1);
   updateStatus();
   redrawPad();
 }
