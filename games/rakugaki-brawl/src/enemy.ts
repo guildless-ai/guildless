@@ -38,7 +38,8 @@ export function generateEnemy(round: number, inkBudget: number, seed: number): {
     push(fit(circle(cx, cy, r, rand, 36), baseTarget));
   } else if (archetype === 1) {
     // Spiky star: many sharp corners.
-    const spikes = 5 + Math.floor(rand() * 7);
+    // Early rounds get gentler stars; later rounds up to 10 spikes.
+    const spikes = 3 + Math.floor(rand() * Math.min(8, 2 + round));
     const pts: Point[] = [];
     for (let i = 0; i <= spikes * 2; i++) {
       const ang = (i / (spikes * 2)) * Math.PI * 2;

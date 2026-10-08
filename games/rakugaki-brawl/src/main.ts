@@ -1,6 +1,7 @@
 import { analyze, totalInk } from './analyze.js';
 import { ARENA_W, makeFighter, simulate, type BattleEvent, type Fighter } from './battle.js';
 import { generateEnemy } from './enemy.js';
+import { loadGallery, pickRival, saveWinner } from './gallery.js';
 import { applyPerks, offerPerks, type Perk } from './perks.js';
 import { CSS, drawDrawing, toSprite } from './render.js';
 import { mulberry32 } from './rng.js';
@@ -111,8 +112,10 @@ $('fight').onclick = () => {
   const result = simulate(a, b, run.seed + run.round);
   log(`ラウンド ${run.round}: ${a.name} (${a.stats.hp}HP/${a.stats.atk}ATK) vs ${b.name} (${b.stats.hp}HP/${b.stats.atk}ATK)`);
   replay(a, b, result.events, () => {
+    const wonRound = run.round;
     run = applyResult(run, result.winner);
     log(result.winner === 'a' ? '勝ち！' : result.winner === 'b' ? '負け…' : '相打ち');
+    if (result.winner === 'a') saveWinner(localStorage, a.drawing, wonRound);
     busy = false;
     updateStatus();
     if (run.over) {
@@ -137,12 +140,25 @@ function replay(a: Fighter, b: Fighter, events: BattleEvent[], done: () => void)
   const start = performance.now();
   const bumps: { x: number; y: number; text: string; color: string; life: number }[] = [];
   const speed = 1; // 1x realtime
+  let shake = 0;          // remaining screen-shake intensity in px
+  let flash: 'a' | 'b' | null = null; // fighter that was just hit
+  let flashLife = 0;
+  let pauseUntil = 0;     // performance.now() until which the replay clock is frozen (hitstop)
+  let frozen = 0;         // accumulated hitstop time in seconds
+  let lastNow = start;
   const frame = (now: number) => {
-    const t = ((now - start) / 1000) * speed;
+    if (now < pauseUntil) { frozen += (now - lastNow) / 1000; lastNow = now; drawArena(((now - start) / 1000 - frozen) * speed); requestAnimationFrame(frame); return; }
+    lastNow = now;
+    const t = ((now - start) / 1000 - frozen) * speed;
     // advance events
     while (i < events.length && events[i].t <= t) {
       const ev = events[i++];
       if (ev.kind === 'hit') {
+        const big = ev.crit || ev.mult > 1;
+        shake = big ? 8 : 3;
+        flash = ev.from === 'a' ? 'b' : 'a';
+        flashLife = 0.12;
+        if (big) pauseUntil = now + 90; // hitstop on crits and super-effective hits
         if (ev.from === 'a') { hpB -= ev.dmg; bumps.push({ x: xB, y: 110, text: (ev.crit ? '!! ' : '') + ev.dmg + (ev.mult > 1 ? ' 効果大' : ev.mult < 1 ? ' いまいち' : ''), color: CSS[a.stats.element], life: 1 }); }
         else { hpA -= ev.dmg; bumps.push({ x: xA, y: 110, text: (ev.crit ? '!! ' : '') + ev.dmg + (ev.mult > 1 ? ' 効果大' : ev.mult < 1 ? ' いまいち' : ''), color: CSS[b.stats.element], life: 1 }); }
       } else {
@@ -161,12 +177,19 @@ function replay(a: Fighter, b: Fighter, events: BattleEvent[], done: () => void)
   };
 
   function drawArena(t = 0): void {
+    arenaCtx.setTransform(1, 0, 0, 1, 0, 0);
     arenaCtx.clearRect(0, 0, arena.width, arena.height);
+    if (shake > 0) {
+      arenaCtx.translate((Math.random() - 0.5) * shake * 2, (Math.random() - 0.5) * shake * 2);
+      shake = Math.max(0, shake - 0.6);
+    }
     arenaCtx.fillStyle = '#f1ede2';
     arenaCtx.fillRect(0, 220, arena.width, 80);
     const wobble = Math.sin(t * 12) * 3;
-    blit(spriteA, xA, 220 + wobble, 1);
-    blit(spriteB, xB, 220 - wobble, -1);
+    flashLife = Math.max(0, flashLife - 1 / 60);
+    const hitA = flash === 'a' && flashLife > 0, hitB = flash === 'b' && flashLife > 0;
+    blit(spriteA, xA + (hitA ? -6 : 0), 220 + wobble, 1, hitA);
+    blit(spriteB, xB + (hitB ? 6 : 0), 220 - wobble, -1, hitB);
     bar(20, 16, hpA / hpA0, CSS[a.stats.element], a.name);
     bar(ARENA_W - 180, 16, hpB / hpB0, CSS[b.stats.element], b.name);
     for (const bmp of bumps) {
@@ -178,13 +201,14 @@ function replay(a: Fighter, b: Fighter, events: BattleEvent[], done: () => void)
       arenaCtx.globalAlpha = 1;
     }
   }
-  function blit(sprite: HTMLCanvasElement, x: number, groundY: number, dir: 1 | -1): void {
+  function blit(sprite: HTMLCanvasElement, x: number, groundY: number, dir: 1 | -1, hit = false): void {
     const maxH = 140, maxW = 200;
     const scale = Math.min(1, maxH / sprite.height, maxW / sprite.width);
     const w = sprite.width * scale, h = sprite.height * scale;
     arenaCtx.save();
     arenaCtx.translate(x, groundY);
     arenaCtx.scale(dir, 1);
+    if (hit) { arenaCtx.globalAlpha = 0.5; arenaCtx.filter = 'brightness(2)'; }
     arenaCtx.drawImage(sprite, -w / 2, -h, w, h);
     arenaCtx.restore();
   }
@@ -248,11 +272,20 @@ function startRound(fresh: boolean, keepDrawing = false): void {
   if (!keepDrawing) drawing = { strokes: [], width: pad.width, height: pad.height };
   $('perks').hidden = true;
   if (challenger) { enemy = challenger; challenger = null; }
-  else enemy = generateEnemy(run.round, inkBudget(run.round), run.seed);
+  else {
+    // Every third round from round 2 on, a past winner of yours comes back as a rival.
+    const rival = run.round >= 2 && run.round % 3 === 2
+      ? pickRival(loadGallery(localStorage), run.round, mulberry32(run.seed * 17 + run.round))
+      : null;
+    enemy = rival
+      ? { name: `むかしの自分 (R${rival.entry.round})`, drawing: rival.drawing }
+      : generateEnemy(run.round, inkBudget(run.round), run.seed);
+  }
   $<HTMLButtonElement>('next').disabled = true;
   // preview enemy in arena
   const es = analyze(enemy.drawing);
   renderStats($('enemystats'), es);
+  arenaCtx.setTransform(1, 0, 0, 1, 0, 0);
   arenaCtx.clearRect(0, 0, arena.width, arena.height);
   const sprite = toSprite(enemy.drawing, es.bbox);
   const scale = Math.min(1, 140 / sprite.height, 200 / sprite.width);
