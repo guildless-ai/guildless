@@ -48,3 +48,11 @@ test('poseAt picks attack, hit and KO from the event log', () => {
   assert.ok(poseAt(events, 'b', 2.6, false).rot < -1.5);
   assert.ok(Math.abs(poseAt(events, 'a', 2.6, false).rot) < 0.01);
 });
+
+test('winner celebrates after the KO delay; hops lift off the ground', () => {
+  const events: BattleEvent[] = [{ t: 2.0, kind: 'end', winner: 'a' }];
+  assert.equal(poseAt(events, 'a', 2.3, false).dy, 0); // still idle during the delay
+  const hop = poseAt(events, 'a', 2.5 + 0.3, false); // peak of the first hop
+  assert.ok(hop.dy < -30);
+  assert.ok(poseAt(events, 'b', 2.8, false).rot < -1.5); // loser stays down
+});

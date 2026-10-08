@@ -36,6 +36,10 @@
   .hp { height:10px; background:#ddd; border:1px solid var(--ink); border-radius:5px; overflow:hidden; }
   .hpbox.right .hp { direction: rtl; }
   .hp > i { display:block; height:100%; background:var(--ink); transition:width .08s; }
+  .stage { position:relative; }
+  .banner { position:absolute; left:0; right:0; top:28%; text-align:center; font-size:44px; font-weight:900; pointer-events:none; text-shadow: 3px 3px 0 #fff, -2px -2px 0 #fff, 2px -2px 0 #fff, -2px 2px 0 #fff; }
+  .banner.pop { animation: pop .45s cubic-bezier(.2,1.6,.4,1) both; }
+  @keyframes pop { from { transform: scale(.3) rotate(-8deg); opacity:0 } to { transform: scale(1) rotate(-3deg); opacity:1 } }
   .perk { flex:1; min-width:120px; text-align:left; }
   .perk small { display:block; color:var(--muted); }
 </style>
@@ -70,7 +74,10 @@
       <div class="hpbox"><span id="nameA"></span><div class="hp"><i id="hpA"></i></div></div>
       <div class="hpbox right"><span id="nameB"></span><div class="hp"><i id="hpB"></i></div></div>
     </div>
-    <canvas id="arena" width="480" height="300"></canvas>
+    <div class="stage">
+      <canvas id="arena" width="480" height="300"></canvas>
+      <div id="banner" class="banner" hidden></div>
+    </div>
     <div class="stats" id="enemystats"></div>
     <div id="perks" class="row" hidden></div>
     <div class="row">

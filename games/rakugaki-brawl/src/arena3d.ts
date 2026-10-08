@@ -70,7 +70,9 @@ export class Arena3D implements ArenaRenderer {
 
   private makeCutout(facing: 1 | -1): Cutout {
     const group = new THREE.Group();
-    group.rotation.y = facing === 1 ? 0 : Math.PI;
+    // Mirror the enemy with a negative x scale so its front face still faces the
+    // camera (three.js flips the winding for negative determinants).
+    group.scale.x = facing;
     // Paper edge: tinted with the fighter's element colour, mostly transparent so it reads as a thin rim, not a frame.
     const side = new THREE.MeshLambertMaterial({ color: 0x222222, transparent: true, opacity: 0.25 });
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, CUTOUT_DEPTH), side);
@@ -85,10 +87,16 @@ export class Arena3D implements ArenaRenderer {
 
   private assign(c: Cutout, view: FighterView): void {
     if (c.face) { c.face.map?.dispose(); c.face.dispose(); }
-    const tex = new THREE.CanvasTexture(view.frame(0, IDLE_PHASE));
+    const first = view.frame(0, IDLE_PHASE);
+    const copy = document.createElement('canvas');
+    copy.width = first.width; copy.height = first.height;
+    copy.getContext('2d')!.drawImage(first, 0, 0);
+    const tex = new THREE.CanvasTexture(copy);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.minFilter = THREE.LinearFilter;
-    c.face = new THREE.MeshLambertMaterial({ map: tex, transparent: true, alphaTest: 0.4, side: THREE.DoubleSide });
+    // FrontSide only: with DoubleSide the mirrored back face showed through the
+    // transparent front face as a second, flipped copy of any asymmetric doodle.
+    c.face = new THREE.MeshLambertMaterial({ map: tex, transparent: true, alphaTest: 0.4, side: THREE.FrontSide });
     c.side.color.set(view.color);
     const maxH = 180, maxW = 260;
     const scale = Math.min(1, maxH / view.height, maxW / view.width);
@@ -105,9 +113,18 @@ export class Arena3D implements ArenaRenderer {
 
   private applyPose(c: Cutout, pose: Pose, phase: Phase, t: number, flash: boolean): void {
     if (!c.view || !c.face) return;
-    // Re-rasterise the doodle with limbs posed for this phase; the texture shares the canvas.
-    c.view.frame(t, phase);
-    c.face.map!.needsUpdate = true;
+    // Re-rasterise the doodle with limbs posed for this phase, then upload a
+    // copy: uploading the 2D canvas that is being redrawn every frame produced
+    // stale/duplicated texels on some backends.
+    const src = c.view.frame(t, phase);
+    const tex = c.face.map!;
+    const dst = tex.image as HTMLCanvasElement;
+    if (dst !== src) {
+      const g = dst.getContext('2d')!;
+      g.clearRect(0, 0, dst.width, dst.height);
+      g.drawImage(src, 0, 0);
+    }
+    tex.needsUpdate = true;
     // Box material order: +x, -x, +y, -y, +z (front), -z (back).
     c.mesh.material = [c.side, c.side, c.side, c.side, c.face, c.face];
     c.face.emissive.set(flash ? 0xffffff : 0x000000);

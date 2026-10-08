@@ -10,6 +10,8 @@ import { CSS, drawDrawing, makeFrameFactory } from './render.js';
 import { mulberry32 } from './rng.js';
 import { applyResult, inkBudget, MAX_ROUNDS, newRun, type RunState } from './run.js';
 import { decodeDrawing, encodeDrawing } from './share.js';
+import { segmentParts } from './parts.js';
+import { Sfx } from './sfx.js';
 import type { Color, Drawing, Point, Stats, Stroke } from './types.js';
 import type { ArenaRenderer, FighterView, Popup } from './view.js';
 
@@ -26,6 +28,7 @@ let current: Stroke | null = null;
 let color: Color = 'black';
 let penWidth = 8;
 let enemy = generateEnemy(run.round, inkBudget(run.round), run.seed);
+const sfx = new Sfx();
 let busy = false;
 /** A doodle pasted from a share code; used as the next enemy instead of a generated one. */
 let challenger: { name: string; drawing: Drawing } | null = null;
@@ -115,6 +118,7 @@ function viewOf(f: Fighter): FighterView {
 
 $('fight').onclick = () => {
   if (busy || drawing.strokes.length === 0) return;
+  sfx.unlock();
   busy = true;
   $<HTMLButtonElement>('fight').disabled = true;
   const a = makeFighter('あなた', structuredClone(drawing), 60, applyPerks(run.perks));
@@ -125,6 +129,7 @@ $('fight').onclick = () => {
     const wonRound = run.round;
     run = applyResult(run, result.winner);
     log(result.winner === 'a' ? '勝ち！' : result.winner === 'b' ? '負け…' : '相打ち');
+    banner(null);
     if (result.winner === 'a') saveWinner(localStorage, a.drawing, wonRound);
     busy = false;
     updateStatus();
@@ -159,16 +164,24 @@ function replay(a: Fighter, b: Fighter, events: BattleEvent[], done: () => void)
   const start = lastNow;
   let finished = false;
   let endAt = Infinity;
+  let nextSwing = 0; // index into events of the next attack whose wind-up has not played
+  const swingLead = 0.22;
   hud(a.name, b.name, CSS[a.stats.element], CSS[b.stats.element], 1, 1);
 
   const frame = (now: number) => {
     if (now < pauseUntil) { frozen += (now - lastNow) / 1000; lastNow = now; }
     else lastNow = now;
     const t = (now - start) / 1000 - frozen;
+    // Wind-up whoosh slightly before each hit lands.
+    while (nextSwing < events.length && events[nextSwing].t - swingLead <= t) {
+      if (events[nextSwing].kind === 'hit') sfx.swing();
+      nextSwing++;
+    }
     while (!finished && i < events.length && events[i].t <= t) {
       const ev = events[i++];
       if (ev.kind === 'hit') {
         const big = ev.crit || ev.mult > 1;
+        sfx.hit(big);
         shake = big ? 8 : 3;
         flash = ev.from === 'a' ? 'b' : 'a';
         flashLife = 0.12;
@@ -178,7 +191,10 @@ function replay(a: Fighter, b: Fighter, events: BattleEvent[], done: () => void)
         else { hpA -= ev.dmg; popups.push({ x: xA, text, color: CSS[b.stats.element], life: 1 }); }
       } else {
         finished = true;
-        endAt = t + 0.9; // let the KO topple play out
+        endAt = t + 2.2; // KO topple, then the winner's victory hops
+        if (ev.winner === 'a') { sfx.win(); banner('勝ち！', CSS[a.stats.element]); }
+        else if (ev.winner === 'b') { sfx.lose(); banner('負け…', '#8a8378'); }
+        else banner('相打ち', '#8a8378');
       }
     }
     // Walk until within reach (mirrors the simulation).
@@ -206,6 +222,16 @@ function replay(a: Fighter, b: Fighter, events: BattleEvent[], done: () => void)
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);
+}
+
+/** Big result text over the arena; null hides it. */
+function banner(text: string | null, color = '#222'): void {
+  const el = $('banner');
+  if (!text) { el.hidden = true; return; }
+  el.textContent = text;
+  el.style.color = color;
+  el.hidden = false;
+  el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
 }
 
 function hud(nameA: string, nameB: string, colA: string, colB: string, ratioA: number, ratioB: number): void {
@@ -289,3 +315,10 @@ function updateStatus(): void {
 }
 
 startRound(true);
+
+// Debug surface for automated tests: inspect the current doodle's segmentation.
+(window as unknown as { __rakugaki: unknown }).__rakugaki = {
+  parts: () => segmentParts(drawing),
+  drawing: () => drawing,
+  frame: (t: number, kind: 'walk' | 'idle' | 'attack' | 'hit' | 'ko' | 'win', u: number) => makeFrameFactory(drawing, analyze(drawing).bbox).frame(t, { kind, u, big: false }).toDataURL(),
+};

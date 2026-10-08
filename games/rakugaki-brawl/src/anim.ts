@@ -15,6 +15,7 @@ export const ATTACK_LEAD = 0.25;   // seconds of wind-up before the hit lands
 export const ATTACK_TAIL = 0.15;   // seconds of recovery after the hit
 export const HIT_DURATION = 0.35;
 export const KO_DURATION = 0.6;
+export const WIN_DELAY = 0.5;   // seconds after the end before the winner celebrates
 
 const easeOut = (u: number) => 1 - (1 - u) * (1 - u);
 const easeIn = (u: number) => u * u;
@@ -59,6 +60,13 @@ export function hitPose(u: number, big: boolean): Pose {
   return { dx: -kb, dy: big ? -40 * Math.sin(u * Math.PI) : 0, sx: 1 + squash, sy: 1 - squash, rot: big ? -Math.PI * 2 * e : -0.3 * (1 - u) };
 }
 
+/** Victory: two quick hops, then a bouncy sway. */
+export function winPose(u: number): Pose {
+  const hop = u < 1.2 ? Math.abs(Math.sin(u * Math.PI / 0.6)) : 0;
+  const sway = u >= 1.2 ? Math.sin((u - 1.2) * 5) * 0.08 : 0;
+  return { dx: 0, dy: -hop * 34, sx: 1 - hop * 0.08, sy: 1 + hop * 0.12, rot: sway };
+}
+
 /** Knock-out: topple over backwards and sink a little. */
 export function koPose(u: number): Pose {
   const e = easeIn(Math.min(1, u));
@@ -71,7 +79,7 @@ export function blend(a: Pose, b: Pose, w: number): Pose {
 
 /** What a fighter is doing at time t, with normalised progress u in [0,1). */
 export interface Phase {
-  kind: 'walk' | 'idle' | 'attack' | 'hit' | 'ko';
+  kind: 'walk' | 'idle' | 'attack' | 'hit' | 'ko' | 'win';
   u: number;
   big: boolean;
   /** Set when an attack and a hit overlap: the attack phase runs underneath. */
@@ -80,8 +88,9 @@ export interface Phase {
 
 export function phaseAt(events: BattleEvent[], who: 'a' | 'b', t: number, moving: boolean): Phase {
   const end = events.find((e) => e.kind === 'end');
-  if (end && end.kind === 'end' && t >= end.t && end.winner !== who && end.winner !== 'draw') {
-    return { kind: 'ko', u: Math.min(1, (t - end.t) / KO_DURATION), big: false };
+  if (end && end.kind === 'end' && t >= end.t && end.winner !== 'draw') {
+    if (end.winner !== who) return { kind: 'ko', u: Math.min(1, (t - end.t) / KO_DURATION), big: false };
+    if (t >= end.t + WIN_DELAY) return { kind: 'win', u: t - end.t - WIN_DELAY, big: false };
   }
   let attack: Phase | null = null;
   let hit: Phase | null = null;
@@ -104,6 +113,7 @@ export function phaseAt(events: BattleEvent[], who: 'a' | 'b', t: number, moving
 export function poseOf(ph: Phase): Pose {
   switch (ph.kind) {
     case 'ko': return koPose(ph.u);
+    case 'win': return winPose(ph.u);
     case 'attack': return attackPose(ph.u);
     case 'hit': return ph.under ? blend(poseOf(ph.under), hitPose(ph.u, ph.big), 0.7) : hitPose(ph.u, ph.big);
     case 'walk': return walkPose(ph.u);
@@ -162,6 +172,14 @@ export function limbPoseOf(ph: Phase, legCount: number, armCount: number): { leg
     case 'ko': {
       for (let i = 0; i < legCount; i++) legs.push(0.8 * ph.u * alt(i));
       for (let i = 0; i < armCount; i++) arms.push(1.2 * ph.u);
+      break;
+    }
+    case 'win': {
+      // Arms thrown up and waved; legs tuck on each hop.
+      const wave = Math.sin(ph.u * 10) * 0.25;
+      const hop = ph.u < 1.2 ? Math.abs(Math.sin(ph.u * Math.PI / 0.6)) : 0;
+      for (let i = 0; i < legCount; i++) legs.push(hop * 0.3 * alt(i));
+      for (let i = 0; i < armCount; i++) arms.push(-1.6 + wave * alt(i));
       break;
     }
   }

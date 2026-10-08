@@ -81,7 +81,9 @@ export function makeFrameFactory(d: Drawing, bbox: { x: number; y: number; w: nu
   const parts = segmentParts(d);
   const padX = bbox.w * 0.3 + jitter, padTop = bbox.h * 0.3 + jitter, padBottom = jitter + 2;
   const box = { x: bbox.x - padX, y: bbox.y - padTop, w: bbox.w + padX * 2, h: bbox.h + padTop + padBottom };
-  const width = Math.max(1, Math.ceil(box.w)), height = Math.max(1, Math.ceil(box.h));
+  // Round the texture size up to a multiple of 4: some GL backends (seen on
+  // ANGLE/SwiftShader) upload odd-width canvases with a wrong row stride.
+  const width = Math.max(4, Math.ceil(box.w / 4) * 4), height = Math.max(4, Math.ceil(box.h / 4) * 4);
   const canvas = document.createElement('canvas');
   canvas.width = width; canvas.height = height;
   const ctx = canvas.getContext('2d')!;
@@ -91,9 +93,15 @@ export function makeFrameFactory(d: Drawing, bbox: { x: number; y: number; w: nu
       const limbs = limbPoseOf(phase, parts.legs.length, parts.arms.length);
       const posed = posedDrawing(d, parts, limbs);
       const boiled = jitterDrawing(posed, jitter, boilIndex(t, boilVariants));
+      // Ground contact: whatever is lowest after posing (a swinging foot, the
+      // body itself) sits on the frame's baseline, so limbs never float.
+      let lowest = -Infinity;
+      for (const st of boiled.strokes) for (const pt of st.points) lowest = Math.max(lowest, pt.y + st.width / 2);
+      const baseline = box.y + box.h - padBottom;
+      const lift = Number.isFinite(lowest) ? lowest - baseline : 0;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, width, height);
-      ctx.translate(-box.x, -box.y);
+      ctx.translate(-box.x, -box.y - lift);
       drawDrawing(ctx, boiled);
       return canvas;
     },
