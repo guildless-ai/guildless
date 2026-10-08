@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { ARENA_W, makeFighter, simulate } from '../src/battle.js';
 import { generateEnemy } from '../src/enemy.js';
 import { applyResult, inkBudget, newRun } from '../src/run.js';
-import { totalInk } from '../src/analyze.js';
+import { analyze, totalInk } from '../src/analyze.js';
 import type { Drawing } from '../src/types.js';
 
 const blob = (ink: number, color: Drawing['strokes'][0]['color'] = 'black'): Drawing => ({
@@ -56,4 +56,33 @@ test('run state: losing all lives ends the run, 10 rounds completes it', () => {
   let run2 = newRun(1);
   for (let i = 0; i < 10; i++) run2 = applyResult(run2, 'a');
   assert.equal(run2.over, true); assert.equal(run2.wins, 10);
+});
+
+test('generated enemies carry readable traits (eyes, legs, arms) across seeds', () => {
+  let eyes = 0, legs = 0, arms = 0, n = 0;
+  for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) {
+    for (let round = 1; round <= 5; round++) {
+      const e = generateEnemy(round, inkBudget(round), seed);
+      const s = analyze(e.drawing);
+      n++;
+      if (s.traits.eyes > 0) eyes++;
+      if (s.traits.legs > 0) legs++;
+      if (s.traits.arms > 0) arms++;
+      assert.ok(totalInk(e.drawing) <= inkBudget(round), `seed ${seed} round ${round} within budget`);
+    }
+  }
+  assert.ok(eyes > n * 0.2, `eyes on ${eyes}/${n}`);
+  assert.ok(legs > n * 0.3, `legs on ${legs}/${n}`);
+  assert.ok(arms > n * 0.1, `arms on ${arms}/${n}`);
+});
+
+test('enemy name prefixes match the traits the player will see', () => {
+  for (const seed of [11, 22, 33, 44, 55, 66, 77, 88]) {
+    const e = generateEnemy(1, inkBudget(1), seed);
+    const t = analyze(e.drawing).traits;
+    if (e.name.startsWith('めだま')) assert.ok(t.eyes > 0, `${e.name} has eyes`);
+    if (e.name.startsWith('むかで')) assert.ok(t.legs >= 4, `${e.name} has 4+ legs`);
+    if (e.name.startsWith('あしつき')) assert.ok(t.legs > 0, `${e.name} has legs`);
+    if (e.name.startsWith('うでつき')) assert.ok(t.arms > 0, `${e.name} has arms`);
+  }
 });

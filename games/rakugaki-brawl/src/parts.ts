@@ -102,7 +102,10 @@ export function segmentParts(d: Drawing): Parts {
       legs.push({ stroke: i, pivot: top, kind: 'leg', side });
       return;
     }
-    const sticksOut = b.x < body.x - body.w * 0.2 || b.x + b.w > body.x + body.w + body.w * 0.2;
+    // Must poke out past the body by a fifth of its width, but never more than 30px
+    // so wide bodies (worms) can still have arms.
+    const out = Math.min(30, body.w * 0.2);
+    const sticksOut = b.x < body.x - out || b.x + b.w > body.x + body.w + out;
     if (sticksOut && arms.length < MAX_ARMS) {
       arms.push({ stroke: i, pivot: nearestToBox(s, body), kind: 'arm', side });
     }
