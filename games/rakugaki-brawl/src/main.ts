@@ -14,6 +14,7 @@ import { applyResult, inkBudget, MAX_ROUNDS, newRun, type RunState } from './run
 import { decodeDrawing, encodeDrawing } from './share.js';
 import { segmentParts } from './parts.js';
 import { Sfx } from './sfx.js';
+import { renderSummaryCard, type RoundRecord } from './summary.js';
 import type { Color, Drawing, Point, Stats, Stroke } from './types.js';
 import type { ArenaRenderer, FighterView, Popup } from './view.js';
 
@@ -32,6 +33,7 @@ let penWidth = 8;
 let enemy = generateEnemy(run.round, inkBudget(run.round), run.seed);
 const sfx = new Sfx();
 const platform = new LocalPlatform(localStorage);
+let history: RoundRecord[] = [];
 let busy = false;
 /** A doodle pasted from a share code; used as the next enemy instead of a generated one. */
 let challenger: { name: string; drawing: Drawing } | null = null;
@@ -119,6 +121,28 @@ const palette = $('palette');
   palette.appendChild(b);
 });
 
+/** End-of-run card: every doodle you used, win/lose per round, save or copy as PNG. */
+function showSummary(): void {
+  const card = renderSummaryCard(run, history, $<HTMLCanvasElement>('summarycard'));
+  $('summary').hidden = false;
+  $('savecard').onclick = () => {
+    const a = document.createElement('a');
+    a.download = `rakugaki-brawl-${run.seed}.png`;
+    a.href = card.toDataURL('image/png');
+    a.click();
+  };
+  $('copycard').onclick = async () => {
+    try {
+      const blob = await new Promise<Blob | null>((res) => card.toBlob(res, 'image/png'));
+      if (!blob) throw new Error('no blob');
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      $('cardmsg').textContent = '画像をコピーした';
+    } catch {
+      $('cardmsg').textContent = 'コピーできない環境。保存を使って';
+    }
+  };
+}
+
 /** A fresh run that carries banked idle-mode ink tokens as 'ink' perks. */
 function startRunWithTokens(): RunState {
   const n = spendTokens(localStorage);
@@ -199,6 +223,8 @@ if (desktop) {
 $('undo').onclick = () => { drawing.strokes.pop(); redrawPad(); };
 $('clear').onclick = () => { drawing.strokes = []; redrawPad(); };
 $('restart').onclick = () => {
+  history = [];
+  $('summary').hidden = true;
   run = startRunWithTokens();
   startRound(true); // clears the log, so report the carried tokens afterwards
   if (run.perks.length) log(`放置モードの報酬: インク壺 ×${run.perks.length} を持ち込み`);
@@ -222,6 +248,7 @@ $('fight').onclick = () => {
   log(`ラウンド ${run.round}: ${a.name} (${a.stats.hp}HP/${a.stats.atk}ATK) vs ${b.name} (${b.stats.hp}HP/${b.stats.atk}ATK)`);
   replay(a, b, result.events, () => {
     const wonRound = run.round;
+    history.push({ round: run.round, drawing: structuredClone(a.drawing), enemyName: enemy.name, result: result.winner === 'a' ? 'win' : result.winner === 'b' ? 'lose' : 'draw' });
     run = applyResult(run, result.winner);
     log(result.winner === 'a' ? '勝ち！' : result.winner === 'b' ? '負け…' : '相打ち');
     banner(null);
@@ -239,6 +266,7 @@ $('fight').onclick = () => {
     if (run.over) {
       log(run.lives <= 0 ? `ゲームオーバー。${run.wins} 勝` : `完走！ ${run.wins} 勝 / ${MAX_ROUNDS} 戦`);
       $<HTMLButtonElement>('next').disabled = true;
+      showSummary();
     } else if (result.winner === 'a') {
       showPerks();
     } else {
