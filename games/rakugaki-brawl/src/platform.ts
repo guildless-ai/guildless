@@ -51,6 +51,29 @@ export class LocalPlatform implements PlatformServices {
   }
 }
 
+/** What the Electron preload exposes when the game runs in the desktop shell. */
+export interface SteamBridge {
+  status(): Promise<{ available: boolean; appId?: number; name?: string; error?: string }>;
+  achieve(id: string): Promise<boolean>;
+}
+
+/**
+ * Steam-backed platform: achievements are kept locally (so the UI toasts and
+ * the title screen list work offline) and mirrored to Steam through the bridge.
+ */
+export class SteamPlatform extends LocalPlatform {
+  constructor(storage: KV, private bridge: SteamBridge, readonly playerName = '') { super(storage); }
+  override unlock(id: AchievementId): boolean {
+    const first = super.unlock(id);
+    void this.bridge.achieve(id).catch(() => false);
+    return first;
+  }
+  /** Re-send every locally unlocked achievement (e.g. after Steam was offline). */
+  async sync(): Promise<void> {
+    for (const id of this.unlocked()) await this.bridge.achieve(id).catch(() => false);
+  }
+}
+
 /** Idle-mode rewards: every 5 idle wins banks one ink token, spent on the next run (max 3). */
 const TOKEN_KEY = 'rakugaki-brawl.inktokens.v1';
 export const TOKEN_EVERY = 5;

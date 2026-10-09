@@ -10,7 +10,7 @@ import { enemyInkScale, loadRank, MAX_RANK, playerInkScale, recordClear, unlocke
 import { loadGallery, pickRival, saveWinner } from './gallery.js';
 import { applyStatic, detectLang, LANG_KEY, lang, setLang, t, type Key } from './i18n.js';
 import { applyPerks, offerPerks, type Modifiers, type Perk } from './perks.js';
-import { ACHIEVEMENTS, bankIdleTokens, LocalPlatform, spendTokens, type AchievementId } from './platform.js';
+import { ACHIEVEMENTS, bankIdleTokens, LocalPlatform, SteamPlatform, spendTokens, type AchievementId, type PlatformServices, type SteamBridge } from './platform.js';
 import { CSS, drawDrawing, makeFrameFactory } from './render.js';
 import { mulberry32 } from './rng.js';
 import { applyResult, inkBudget, MAX_ROUNDS, newRun, type RunState } from './run.js';
@@ -48,7 +48,7 @@ let color: Color = 'black';
 let penWidth = 8;
 let enemy: { name: string; drawing: Drawing; kind: 'gen' | 'rival' | 'friend' } = { ...generateEnemy(run.round, inkBudget(run.round) * enemyInkScale(run.rank), run.seed), kind: 'gen' };
 const sfx = new Sfx();
-const platform = new LocalPlatform(localStorage);
+let platform: PlatformServices = new LocalPlatform(localStorage);
 let history: RoundRecord[] = [];
 let busy = false;
 /** A doodle pasted from a share code; used as the next enemy instead of a generated one. */
@@ -379,7 +379,7 @@ $('idle').onclick = enterIdle;
 $('idleexit').onclick = exitIdle;
 
 // Inside the Electron shell a separate always-on-top strip window is available.
-const desktop = (window as unknown as { rakugakiDesktop?: { openIdle(): void; closeIdle(): void } }).rakugakiDesktop;
+const desktop = (window as unknown as { rakugakiDesktop?: { openIdle(): void; closeIdle(): void; steam?: SteamBridge } }).rakugakiDesktop;
 if (desktop) {
   const b = $<HTMLButtonElement>('idlewindow');
   b.hidden = false;
@@ -740,6 +740,17 @@ function updateStatus(): void {
 
 startRound(true);
 refreshTitle();
+// Desktop shell with Steam running: mirror achievements to Steam and greet the player.
+if (desktop?.steam) {
+  desktop.steam.status().then((st) => {
+    if (!st.available) return;
+    const sp = new SteamPlatform(localStorage, desktop.steam!, st.name ?? '');
+    platform = sp;
+    void sp.sync();
+    $('steamuser').textContent = st.name ? `Steam: ${st.name}` : 'Steam';
+    refreshTitle();
+  }).catch(() => undefined);
+}
 {
   const params = new URLSearchParams(location.search);
   const code = params.get('code');

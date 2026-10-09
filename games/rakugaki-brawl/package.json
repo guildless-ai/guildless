@@ -2,6 +2,7 @@
   "name": "rakugaki-brawl",
   "version": "0.1.0",
   "private": true,
+  "author": "Rakugaki Brawl team",
   "description": "Draw a doodle, it fights. Ink-budget auto-battler roguelite prototype.",
   "type": "module",
   "scripts": {
@@ -12,6 +13,7 @@
     "preview": "vite preview",
     "electron": "electron .",
     "dist:win": "npm run build && electron-builder --win --x64",
+    "dist:steam-win": "npm run build && electron-builder --win dir --x64",
     "dist:mac": "npm run build && electron-builder --mac",
     "dist:linux": "npm run build && electron-builder --linux AppImage"
   },
@@ -37,10 +39,16 @@
     "directories": {
       "output": "release"
     },
+    "asarUnpack": [
+      "node_modules/steamworks.js/**"
+    ],
     "win": {
       "target": [
         "nsis",
         "zip"
+      ],
+      "extraFiles": [
+        { "from": "node_modules/steamworks.js/dist/win64/steam_api64.dll", "to": "steam_api64.dll" }
       ]
     },
     "mac": {
@@ -51,7 +59,13 @@
     "linux": {
       "target": [
         "AppImage"
+      ],
+      "extraFiles": [
+        { "from": "node_modules/steamworks.js/dist/linux64/libsteam_api.so", "to": "libsteam_api.so" }
       ]
     }
+  },
+  "dependencies": {
+    "steamworks.js": "^0.4.0"
   }
 }

@@ -3,6 +3,10 @@
 // sit at the bottom of a second monitor while you work.
 const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const path = require('node:path');
+const steam = require('./steam.cjs');
+
+// Steam first: the overlay needs command-line switches set before the app is ready.
+const steamOk = steam.load();
 
 const DIST = path.join(__dirname, '..', 'dist', 'index.html');
 let mainWin = null;
@@ -41,6 +45,8 @@ function openIdleWindow() {
   idleWin.on('closed', () => { idleWin = null; });
 }
 
+ipcMain.handle('rakugaki:steam-status', () => steam.status());
+ipcMain.handle('rakugaki:steam-achieve', (_e, id) => steam.achieve(id));
 ipcMain.on('rakugaki:open-idle', openIdleWindow);
 ipcMain.on('rakugaki:close-idle', () => { if (idleWin) idleWin.close(); });
 
@@ -57,7 +63,7 @@ app.whenReady().then(() => {
       idleWin.webContents.once('did-finish-load', async () => {
         const idle = await idleWin.webContents.executeJavaScript('document.body.classList.contains("idle") || document.getElementById("log").textContent');
         const [w, h] = idleWin.getSize();
-        console.log(JSON.stringify({ smoke: true, title, mode, desktopButtonHidden: btn, idleWindow: { w, h, alwaysOnTop: idleWin.isAlwaysOnTop(), idle } }));
+        console.log(JSON.stringify({ smoke: true, title, mode, desktopButtonHidden: btn, steam: { loaded: steamOk, ...steam.status() }, idleWindow: { w, h, alwaysOnTop: idleWin.isAlwaysOnTop(), idle } }));
         setTimeout(() => app.quit(), 300);
       });
     });
