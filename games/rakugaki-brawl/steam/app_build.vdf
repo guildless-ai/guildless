@@ -1,0 +1,12 @@
+"AppBuild"
+{
+	"AppID" "<APP_ID>"
+	"Desc" "Rakugaki Brawl build"
+	"BuildOutput" "../release/steam-output/"
+	"ContentRoot" "../release/win-unpacked/"
+	"SetLive" ""
+	"Depots"
+	{
+		"<DEPOT_ID>" "depot_build.vdf"
+	}
+}

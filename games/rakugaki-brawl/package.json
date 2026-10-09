@@ -1,0 +1,71 @@
+{
+  "name": "rakugaki-brawl",
+  "version": "0.1.0",
+  "private": true,
+  "author": "Rakugaki Brawl team",
+  "description": "Draw a doodle, it fights. Ink-budget auto-battler roguelite prototype.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test test/*.test.ts",
+    "preview": "vite preview",
+    "electron": "electron .",
+    "dist:win": "npm run build && electron-builder --win --x64",
+    "dist:steam-win": "npm run build && electron-builder --win dir --x64",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:linux": "npm run build && electron-builder --linux AppImage"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/three": "^0.182.0",
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3",
+    "three": "^0.182.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.2",
+    "vite": "^7.0.0"
+  },
+  "main": "electron/main.cjs",
+  "build": {
+    "appId": "ai.guildless.rakugaki-brawl",
+    "productName": "Rakugaki Brawl",
+    "files": [
+      "dist/**",
+      "electron/**",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "asarUnpack": [
+      "node_modules/steamworks.js/**"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ],
+      "extraFiles": [
+        { "from": "node_modules/steamworks.js/dist/win64/steam_api64.dll", "to": "steam_api64.dll" }
+      ]
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "extraFiles": [
+        { "from": "node_modules/steamworks.js/dist/linux64/libsteam_api.so", "to": "libsteam_api.so" }
+      ]
+    }
+  },
+  "dependencies": {
+    "steamworks.js": "^0.4.0"
+  }
+}
