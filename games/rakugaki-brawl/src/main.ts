@@ -4,7 +4,9 @@ import { Arena2D } from './arena2d.js';
 import { Arena3D } from './arena3d.js';
 import { ARENA_W, makeFighter, simulate, type BattleEvent, type Fighter } from './battle.js';
 import { generateEnemy } from './enemy.js';
+import { dailyKey, dailySeed, loadDailyBest, recordDaily } from './daily.js';
 import { afterWave, idleBudget, loadIdle, newIdle, saveIdle, type IdleState } from './idle.js';
+import { enemyInkScale, loadRank, MAX_RANK, playerInkScale, recordClear, unlockedRank } from './rank.js';
 import { loadGallery, pickRival, saveWinner } from './gallery.js';
 import { applyStatic, detectLang, LANG_KEY, lang, setLang, t, type Key } from './i18n.js';
 import { applyPerks, offerPerks, type Perk } from './perks.js';
@@ -40,7 +42,7 @@ let drawing: Drawing = { strokes: [], width: pad.width, height: pad.height };
 let current: Stroke | null = null;
 let color: Color = 'black';
 let penWidth = 8;
-let enemy: { name: string; drawing: Drawing; kind: 'gen' | 'rival' | 'friend' } = { ...generateEnemy(run.round, inkBudget(run.round), run.seed), kind: 'gen' };
+let enemy: { name: string; drawing: Drawing; kind: 'gen' | 'rival' | 'friend' } = { ...generateEnemy(run.round, inkBudget(run.round) * enemyInkScale(run.rank), run.seed), kind: 'gen' };
 const sfx = new Sfx();
 const platform = new LocalPlatform(localStorage);
 let history: RoundRecord[] = [];
@@ -48,7 +50,8 @@ let busy = false;
 /** A doodle pasted from a share code; used as the next enemy instead of a generated one. */
 let challenger: { name: string; drawing: Drawing; kind: 'friend' } | null = null;
 
-const budget = () => inkBudget(run.round, applyPerks(run.perks).inkBonus);
+const budget = () => Math.round(inkBudget(run.round, applyPerks(run.perks).inkBonus) * playerInkScale(run.rank));
+const enemyBudget = (round: number) => Math.round(inkBudget(round) * enemyInkScale(run.rank));
 
 // ---------- drawing pad ----------
 function canvasPoint(e: PointerEvent): Point {
@@ -164,9 +167,9 @@ function showSummary(): void {
 }
 
 /** A fresh run that carries banked idle-mode ink tokens as 'ink' perks. */
-function startRunWithTokens(): RunState {
+function startRunWithTokens(rank: number, daily: string | undefined): RunState {
   const n = spendTokens(localStorage);
-  const r = newRun();
+  const r = daily ? newRun(dailySeed(daily), rank, daily) : newRun(undefined, rank);
   if (n > 0) r.perks = Array.from({ length: n }, () => 'ink' as const);
   return r;
 }
@@ -238,6 +241,50 @@ function idleWave(): void {
   label();
 }
 
+// ---------- title screen ----------
+function refreshTitle(): void {
+  const sel = $<HTMLSelectElement>('rank');
+  const unlocked = unlockedRank(loadRank(localStorage));
+  sel.innerHTML = '';
+  for (let r = 0; r <= unlocked; r++) { const o = document.createElement('option'); o.value = String(r); o.textContent = String(r); sel.appendChild(o); }
+  sel.value = String(Math.min(unlocked, Number(sel.dataset.pick ?? unlocked)));
+  const hint = () => {
+    const r = Number(sel.value);
+    $('rankhint').textContent = t('title.rankHint', { r, p: Math.round(playerInkScale(r) * 100), e: Math.round(enemyInkScale(r) * 100) }) + (unlocked < MAX_RANK && r === unlocked ? ' ' + t('title.rankLocked', { r }) : '');
+  };
+  sel.onchange = () => { sel.dataset.pick = sel.value; hint(); };
+  hint();
+  const best = loadDailyBest(localStorage, dailyKey());
+  $('dailybest').textContent = best ? t('title.dailyBest', { wins: best.wins, rounds: best.rounds }) : t('title.dailyNone');
+  const have = platform.unlocked();
+  const ids = Object.keys(ACHIEVEMENTS) as AchievementId[];
+  $('achcount').textContent = t('title.achCount', { n: have.length, total: ids.length });
+  $('achlist').innerHTML = ids.map((id) => `<div class="ach ${have.includes(id) ? '' : 'locked'}"><span class="dot"></span><div><strong>${t(`ach.${id}.name` as Key)}</strong><div class="hint">${t(`ach.${id}.desc` as Key)}</div></div></div>`).join('');
+}
+
+function beginRun(rank: number, daily?: string): void {
+  history = [];
+  $('summary').hidden = true;
+  run = startRunWithTokens(rank, daily);
+  document.body.classList.add('ingame');
+  document.body.classList.toggle('daily', !!daily);
+  startRound(true);
+  if (run.perks.length) log(t('idle.carry', { n: run.perks.length }));
+}
+
+function toTitle(): void {
+  if (idle) exitIdle();
+  document.body.classList.remove('ingame', 'daily', 'boss');
+  refreshTitle();
+}
+
+$('start').onclick = () => beginRun(Number($<HTMLSelectElement>('rank').value));
+$('startdaily').onclick = () => beginRun(0, dailyKey());
+$('titleidle').onclick = () => { document.body.classList.add('ingame'); enterIdle(); if (!idle) toTitle(); };
+$('showach').onclick = () => $('achlist').classList.toggle('open');
+$('totitle').onclick = toTitle;
+$('langtoggle2').onclick = () => $('langtoggle').click();
+
 $('langtoggle').onclick = () => { setLang(lang() === 'ja' ? 'en' : 'ja', localStorage); const u = new URL(location.href); u.searchParams.delete('lang'); location.href = u.toString(); };
 
 $('idle').onclick = enterIdle;
@@ -253,13 +300,7 @@ if (desktop) {
 
 $('undo').onclick = () => { drawing.strokes.pop(); redrawPad(); };
 $('clear').onclick = () => { drawing.strokes = []; redrawPad(); };
-$('restart').onclick = () => {
-  history = [];
-  $('summary').hidden = true;
-  run = startRunWithTokens();
-  startRound(true); // clears the log, so report the carried tokens afterwards
-  if (run.perks.length) log(t('idle.carry', { n: run.perks.length }));
-};
+$('restart').onclick = () => beginRun(run.rank, run.dailyKey);
 $('next').onclick = () => startRound(false);
 
 // ---------- battle ----------
@@ -297,6 +338,15 @@ $('fight').onclick = () => {
     if (run.over) {
       log(run.lives <= 0 ? t('gameover', { wins: run.wins }) : t('cleared', { wins: run.wins, max: MAX_ROUNDS }));
       $<HTMLButtonElement>('next').disabled = true;
+      if (run.lives > 0) {
+        const before = unlockedRank(loadRank(localStorage));
+        const after = unlockedRank(recordClear(localStorage, run.rank));
+        if (after > before) log(t('rank.cleared', { r: run.rank, next: after }));
+      }
+      if (run.dailyKey) {
+        const best = recordDaily(localStorage, { key: run.dailyKey, wins: run.wins, rounds: history.length, cleared: run.lives > 0 });
+        log(t('daily.recorded', { wins: best.wins, rounds: best.rounds }));
+      }
       showSummary();
     } else if (result.winner === 'a') {
       showPerks();
@@ -472,7 +522,7 @@ function startRound(fresh: boolean, keepDrawing = false): void {
       : null;
     enemy = rival
       ? { name: t('rival', { round: rival.entry.round }), drawing: rival.drawing, kind: 'rival' }
-      : { ...generateEnemy(run.round, inkBudget(run.round), run.seed), kind: 'gen' };
+      : { ...generateEnemy(run.round, enemyBudget(run.round), run.seed), kind: 'gen' };
   }
   $<HTMLButtonElement>('next').disabled = true;
   const b = makeFighter(enemy.name, enemy.drawing, ARENA_W - 60);
@@ -486,20 +536,24 @@ function startRound(fresh: boolean, keepDrawing = false): void {
 function updateStatus(): void {
   const perks = run.perks.length ? t('status.perks', { n: run.perks.length }) : '';
   $('status').textContent = t('status', { round: Math.min(run.round, MAX_ROUNDS), max: MAX_ROUNDS, lives: '♥'.repeat(run.lives), wins: run.wins }) + perks;
+  $('badges').innerHTML = (run.rank ? `<span class="badge">${t('badge.rank', { r: run.rank })}</span>` : '') + (run.dailyKey ? `<span class="badge">${t('badge.daily', { date: run.dailyKey.slice(5) })}</span>` : '');
+  // Boss rounds (10) tint the paper red, like a state change.
+  document.body.classList.toggle('boss', run.round >= MAX_ROUNDS && !run.over);
   $('roundinfo').textContent = `seed ${run.seed}`;
 }
 
 startRound(true);
+refreshTitle();
 {
   const params = new URLSearchParams(location.search);
   const code = params.get('code');
   if (code) {
     try {
       const d = decodeDrawing(code);
-      if (d.strokes.length) { challenger = { name: t('friend'), drawing: d, kind: 'friend' }; log(t('share.linkNext')); startRound(false, true); }
+      if (d.strokes.length) { challenger = { name: t('friend'), drawing: d, kind: 'friend' }; document.body.classList.add('ingame'); log(t('share.linkNext')); startRound(false, true); }
     } catch { log(t('share.linkBad')); }
   }
-  if (params.has('idle')) enterIdle();
+  if (params.has('idle')) { document.body.classList.add('ingame'); enterIdle(); }
 }
 
 // Debug surface for automated tests: inspect the current doodle's segmentation.

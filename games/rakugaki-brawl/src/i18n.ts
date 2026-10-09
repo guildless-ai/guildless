@@ -53,6 +53,14 @@ const ja = {
   'ach.share_fight.name': 'ともだちと', 'ach.share_fight.desc': '共有コードの絵と戦う',
   'ach.idle_streak_5.name': '放置の達人', 'ach.idle_streak_5.desc': '放置モードで5連勝',
   'lang.toggle': 'English',
+  'title.tagline': '描いた落書きが、そのまま戦う。',
+  'title.start': 'はじめる', 'title.daily': '日替わり', 'title.idle': '放置モード', 'title.achievements': '実績',
+  'title.rank': 'ランク', 'title.rankHint': 'ランク {r}: 自分のインク {p}% ・ 敵の予算 {e}%', 'title.rankLocked': '（ランク {r} クリアで次が開く）',
+  'title.dailyBest': '今日のベスト: {wins} 勝 / {rounds} R', 'title.dailyNone': '今日はまだ挑戦していない',
+  'title.back': 'タイトルへ', 'title.achCount': '実績 {n} / {total}',
+  'badge.rank': 'ランク {r}', 'badge.daily': '日替わり {date}',
+  'summary.rank': ' ・ ランク {r}', 'summary.daily': ' ・ 日替わり {date}',
+  'rank.cleared': 'ランク {r} クリア！ ランク {next} が開いた', 'daily.recorded': '日替わりの記録: {wins} 勝 / {rounds} R',
 };
 export type Key = keyof typeof ja;
 
@@ -102,6 +110,14 @@ const en: Record<Key, string> = {
   'ach.share_fight.name': 'With friends', 'ach.share_fight.desc': 'Fight a doodle from a share code',
   'ach.idle_streak_5.name': 'Idle master', 'ach.idle_streak_5.desc': 'Win 5 in a row in idle mode',
   'lang.toggle': '日本語',
+  'title.tagline': 'Your doodle fights exactly as you drew it.',
+  'title.start': 'Play', 'title.daily': 'Daily', 'title.idle': 'Idle mode', 'title.achievements': 'Achievements',
+  'title.rank': 'Rank', 'title.rankHint': 'Rank {r}: your ink {p}% · enemy budget {e}%', 'title.rankLocked': '(clear rank {r} to unlock the next)',
+  'title.dailyBest': "Today's best: {wins} wins / {rounds} R", 'title.dailyNone': 'No attempt today yet',
+  'title.back': 'Title', 'title.achCount': 'Achievements {n} / {total}',
+  'badge.rank': 'Rank {r}', 'badge.daily': 'Daily {date}',
+  'summary.rank': ' · rank {r}', 'summary.daily': ' · daily {date}',
+  'rank.cleared': 'Rank {r} cleared! Rank {next} unlocked', 'daily.recorded': 'Daily recorded: {wins} wins / {rounds} R',
 };
 
 const dict: Record<Lang, Record<Key, string>> = { ja, en };

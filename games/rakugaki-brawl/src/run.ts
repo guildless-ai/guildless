@@ -8,13 +8,19 @@ export interface RunState {
   seed: number;
   over: boolean;
   perks: PerkId[];
+  /** Difficulty rank (ink squeeze). 0 = normal. */
+  rank: number;
+  /** Set for daily runs: the YYYY-MM-DD key the seed came from. */
+  dailyKey?: string;
 }
 
 export const MAX_ROUNDS = 10;
 export const START_LIVES = 3;
 
-export function newRun(seed = Date.now() % 100000): RunState {
-  return { round: 1, lives: START_LIVES, wins: 0, seed, over: false, perks: [] };
+export function newRun(seed = Date.now() % 100000, rank = 0, dailyKey?: string): RunState {
+  const r: RunState = { round: 1, lives: START_LIVES, wins: 0, seed, over: false, perks: [], rank };
+  if (dailyKey) r.dailyKey = dailyKey;
+  return r;
 }
 
 /** Ink budget grows each round so later doodles can be bigger. */

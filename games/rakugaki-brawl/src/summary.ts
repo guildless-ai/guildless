@@ -54,7 +54,7 @@ export function renderSummaryCard(run: RunState, history: RoundRecord[], canvas:
   ctx.fillText(cardTitle(run, history), 40, 36);
   ctx.font = '26px system-ui, "Hiragino Sans", sans-serif';
   ctx.fillStyle = '#8a8378';
-  ctx.fillText(t('summary.sub', { perks: run.perks.length, seed: run.seed }), 42, 104);
+  ctx.fillText(t('summary.sub', { perks: run.perks.length, seed: run.seed }) + (run.rank ? t('summary.rank', { r: run.rank }) : '') + (run.dailyKey ? t('summary.daily', { date: run.dailyKey.slice(5) }) : ''), 42, 104);
 
   const L = cardLayout(history.length);
   history.slice(0, 10).forEach((rec, i) => {
