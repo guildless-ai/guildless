@@ -56,12 +56,12 @@ export class Arena3D implements ArenaRenderer {
     sun.position.set(2, 5, 4);
     this.scene.add(sun);
 
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(14, 8), new THREE.MeshBasicMaterial({ color: 0xf1ede2 }));
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 40), new THREE.MeshBasicMaterial({ color: 0xf1ede2 }));
     ground.rotation.x = -Math.PI / 2;
     this.scene.add(ground);
     // A faint horizon line so depth reads even on a plain background.
-    const line = new THREE.Mesh(new THREE.PlaneGeometry(14, 0.02), new THREE.MeshBasicMaterial({ color: 0xcbc3b3 }));
-    line.rotation.x = -Math.PI / 2; line.position.set(0, 0.001, -2.5);
+    const line = new THREE.Mesh(new THREE.PlaneGeometry(80, 0.04), new THREE.MeshBasicMaterial({ color: 0xcbc3b3 }));
+    line.rotation.x = -Math.PI / 2; line.position.set(0, 0.001, -3.5);
     this.scene.add(line);
 
     this.a = this.makeCutout(1);
@@ -74,7 +74,9 @@ export class Arena3D implements ArenaRenderer {
     // camera (three.js flips the winding for negative determinants).
     group.scale.x = facing;
     // Paper edge: tinted with the fighter's element colour, mostly transparent so it reads as a thin rim, not a frame.
-    const side = new THREE.MeshLambertMaterial({ color: 0x222222, transparent: true, opacity: 0.25 });
+    // The box's side faces are the sprite's bounding box, not the doodle's outline, so at
+    // high resolution they read as stray lines. Keep them fully transparent.
+    const side = new THREE.MeshLambertMaterial({ color: 0x222222, transparent: true, opacity: 0, depthWrite: false });
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, CUTOUT_DEPTH), side);
     mesh.visible = false;
     group.add(mesh);
@@ -186,22 +188,26 @@ export class Arena3D implements ArenaRenderer {
 
   private syncPopups(s: ReplayState): void {
     this.clearPopups();
-    for (const p of s.popups) {
-      if (p.life <= 0) continue;
+    s.popups.forEach((p, i) => {
+      if (p.life <= 0) return;
       const c = document.createElement('canvas');
-      c.width = 256; c.height = 64;
+      c.width = 256; c.height = 96;
       const ctx = c.getContext('2d')!;
-      ctx.font = 'bold 36px system-ui, sans-serif';
+      const big = p.text.startsWith('!!') || p.text.length > 3;
+      ctx.font = `900 ${big ? 56 : 44}px system-ui, sans-serif`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.lineWidth = 6; ctx.strokeStyle = '#ffffff'; ctx.strokeText(p.text, 128, 32);
-      ctx.fillStyle = p.color; ctx.fillText(p.text, 128, 32);
+      ctx.lineWidth = 8; ctx.strokeStyle = '#ffffff'; ctx.strokeText(p.text, 128, 48);
+      ctx.fillStyle = p.color; ctx.fillText(p.text, 128, 48);
       const tex = new THREE.CanvasTexture(c);
       tex.colorSpace = THREE.SRGBColorSpace;
-      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: Math.min(1, p.life * 1.5), depthTest: false }));
-      sp.scale.set(1.6, 0.4, 1);
-      sp.position.set(p.x / PPU - 3, 1.9 + (1 - p.life) * 0.8, 0.6);
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: Math.min(1, p.life * 2), depthTest: false }));
+      // Pop in, then drift up and fan out sideways so consecutive hits don't stack into one blob.
+      const pop = 1 + Math.max(0, p.life - 0.8) * 2;
+      sp.scale.set(2.0 * pop, 0.75 * pop, 1);
+      const fan = ((i * 7) % 5 - 2) * 0.35;
+      sp.position.set(p.x / PPU - 3 + fan, 1.9 + (1 - p.life) * 1.2, 0.6);
       this.scene.add(sp);
       this.popupSprites.push(sp);
-    }
+    });
   }
 }

@@ -42,8 +42,47 @@
   header { display:flex; justify-content:space-between; align-items:center; padding:10px 16px; border-bottom:2px dashed #cbc3b3; }
   header h1 { font-size:20px; margin:0; }
   #status { font-size:14px; color:var(--muted); }
-  main { display:grid; grid-template-columns: 1fr 1fr; gap:16px; padding:16px; max-width:1200px; margin:0 auto; }
-  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  /* Two full-screen phases instead of two cramped columns. */
+  main { display:grid; gap:14px; padding:12px 16px; max-width:1500px; margin:0 auto; }
+  body.phase-draw main { grid-template-columns: 96px minmax(0, 1fr) 300px; align-items:start; }
+  body.phase-draw #battle { display:contents; }
+  body.phase-draw #stagewrap, body.phase-draw #battlebar, body.phase-draw #log, body.phase-draw #summary, body.phase-draw details { display:none; }
+  body.phase-draw #sidepanel { grid-column: 3; display:flex; flex-direction:column; gap:10px; }
+  body.phase-draw #tools { grid-column: 1; }
+  body.phase-draw #draw { grid-column: 2; }
+  body.phase-battle main { grid-template-columns: minmax(0, 1fr); }
+  body.phase-battle #draw, body.phase-battle #tools, body.phase-battle #sidepanel { display:none; }
+  body.phase-battle #stagewrap { display:block; }
+  body.phase-battle #battle { background:transparent; border:0; box-shadow:none; padding:0; }
+  @media (max-width: 900px) { body.phase-draw main { grid-template-columns: 1fr; } body.phase-draw #tools, body.phase-draw #draw, body.phase-draw #sidepanel { grid-column: 1; } }
+  #tools { display:flex; flex-direction:column; gap:8px; align-items:center; padding:10px 6px; }
+  #tools .swatch { width:40px; height:40px; }
+  #tools .pen { width:72px; height:40px; padding:0; display:flex; align-items:center; justify-content:center; }
+  #tools .pen i { display:block; background:var(--ink); border-radius:999px; }
+  #tools .pen.active, #tools button.active { background:var(--ink); color:#fff; }
+  #tools .pen.active i { background:#fff; }
+  #tools .key { font-size:10px; color:var(--muted); }
+  #tools hr { width:60%; border:0; border-top:2px dashed #ccc; margin:2px 0; }
+  #draw { padding:10px; }
+  #pad { aspect-ratio: 4 / 3; width:min(100%, calc((100vh - 190px) * 4 / 3)); height:auto; margin:0 auto; cursor: crosshair; }
+  #sidepanel section { padding:10px; }
+  #sidepanel .stats { grid-template-columns: repeat(2, 1fr); font-size:14px; }
+  #sidepanel #fight { width:100%; font-size:24px; padding:16px; border-width:3px; box-shadow:4px 4px 0 var(--ink); }
+  #sidepanel #fight:not(:disabled) { animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 50% { box-shadow:6px 6px 0 var(--ink); filter: brightness(1.08); } }
+  #preview { aspect-ratio: 16 / 10; }
+  #stagewrap .hud { font-size:16px; font-weight:700; }
+  #stagewrap .hp { height:18px; }
+  #arena { aspect-ratio: 16 / 10; width:min(100%, calc((100vh - 240px) * 1.6)); height:auto; margin:0 auto; background:transparent; border:0; }
+  #battlebar { justify-content:center; }
+  #battlebar button { font-size:18px; padding:12px 20px; }
+  #perks { justify-content:center; }
+  .perk { flex:0 1 260px; min-height:120px; padding:14px; border-width:3px; box-shadow:4px 4px 0 var(--ink); font-size:16px; transform: rotate(-1deg); }
+  .perk:nth-child(2) { transform: rotate(.8deg); } .perk:nth-child(3) { transform: rotate(-.5deg); }
+  .perk:hover { transform: rotate(0) translate(-2px,-2px); box-shadow:6px 6px 0 var(--ink); }
+  .perk small { font-size:13px; margin-top:6px; }
+  .perk .key { float:right; font-size:11px; color:var(--muted); }
+  .kbd { display:inline-block; border:1px solid var(--ink); border-bottom-width:3px; border-radius:4px; padding:0 5px; font-size:11px; background:#fff; }
   section { background:#fff; border:2px solid var(--ink); border-radius:12px; padding:12px; box-shadow:4px 4px 0 var(--ink); }
   canvas { display:block; width:100%; height:auto; background:#fff; border:1px solid #ddd; border-radius:8px; touch-action:none; }
   .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:8px 0; }
@@ -66,8 +105,9 @@
   .hpbox.right .hp { direction: rtl; }
   .hp > i { display:block; height:100%; background:var(--ink); transition:width .08s; }
   .stage { position:relative; }
-  body.idle header, body.idle #draw, body.idle #summary, body.idle #perks, body.idle #log, body.idle details, body.idle #next, body.idle #restart, body.idle #enemystats { display:none !important; }
+  body.idle header, body.idle #draw, body.idle #tools, body.idle #sidepanel, body.idle #summary, body.idle #perks, body.idle #log, body.idle details, body.idle #next, body.idle #restart, body.idle #enemystats { display:none !important; }
   body.idle main { display:block; padding:6px; max-width:none; }
+  body.idle #arena { aspect-ratio:auto; max-height:none; }
   body.idle section { padding:6px; box-shadow:none; border-width:1px; }
   body.idle #idlebar { display:flex; }
   #idlebar { display:none; justify-content:space-between; font-size:12px; color:var(--muted); margin-top:4px; }
@@ -77,7 +117,7 @@
   @keyframes toast { 0% { opacity:0; transform:translate(-50%,-10px) } 10%,80% { opacity:1; transform:translate(-50%,0) } 100% { opacity:0 } }
   .banner.pop { animation: pop .45s cubic-bezier(.2,1.6,.4,1) both; }
   @keyframes pop { from { transform: scale(.3) rotate(-8deg); opacity:0 } to { transform: scale(1) rotate(-3deg); opacity:1 } }
-  .perk { flex:1; min-width:120px; text-align:left; }
+  .perk { text-align:left; }
   .perk small { display:block; color:var(--muted); }
 </style>
 </head>
@@ -106,58 +146,68 @@
   <div><span id="status"></span><span id="badges"></span></div>
 </header>
 <main>
+  <section id="tools">
+    <div id="palette"></div>
+  </section>
   <section id="draw">
-    <div class="row">
+    <div class="row" style="margin:0 0 6px">
       <strong data-i18n="draw.heading">描く</strong>
       <span class="hint" data-i18n="draw.hint">インクは有限。何を描く？</span>
+      <span style="flex:1"></span>
+      <span data-i18n="draw.ink">インク</span><div class="meter" style="max-width:260px"><i id="inkbar"></i></div><span id="inktext"></span>
     </div>
-    <canvas id="pad" width="480" height="360"></canvas>
-    <div class="row">
-      <span data-i18n="draw.ink">インク</span><div class="meter"><i id="inkbar"></i></div><span id="inktext"></span>
-    </div>
-    <div class="row" id="palette"></div>
-    <div class="row">
-      <button id="undo" data-i18n="draw.undo">戻す</button>
-      <button id="clear" data-i18n="draw.clear">消す</button>
-      <button id="fight" class="primary" data-i18n="draw.fight">たたかう！</button>
-    </div>
-    <div class="stats" id="mystats"></div>
-    <p class="hint" data-i18n="draw.rules">太く塗る→HP / トゲ・角→攻撃 / 軽い→素早さ / 横に長い→リーチ / 閉じた輪→盾 / 目→クリティカル / 脚→速さ / 腕→攻撃。色は相性: 赤&gt;緑&gt;青&gt;赤、黒は無属性。</p>
+    <canvas id="pad" width="960" height="720"></canvas>
+    <p class="hint" style="margin:6px 0 0" data-i18n="draw.rules">太く塗る→HP / トゲ・角→攻撃 / 軽い→素早さ / 横に長い→リーチ / 閉じた輪→盾 / 目→クリティカル / 脚→速さ / 腕→攻撃。色は相性: 赤&gt;緑&gt;青&gt;赤、黒は無属性。</p>
   </section>
-  <section>
-    <div class="row"><strong data-i18n="battle.heading">バトル</strong><span id="roundinfo" class="hint"></span><span id="rendermode" class="hint"></span></div>
-    <div class="hud">
-      <div class="hpbox"><span id="nameA"></span><div class="hp"><i id="hpA"></i></div></div>
-      <div class="hpbox right"><span id="nameB"></span><div class="hp"><i id="hpB"></i></div></div>
+  <section id="battle">
+    <div id="sidepanel">
+      <section>
+        <div class="row" style="margin:0 0 6px"><strong data-i18n="battle.nextHeading">次の相手</strong><span id="roundinfo" class="hint"></span></div>
+        <canvas id="preview" width="480" height="300"></canvas>
+        <div class="stats" id="enemystats" style="margin-top:8px"></div>
+      </section>
+      <section>
+        <div class="row" style="margin:0 0 6px"><strong data-i18n="draw.mine">自分の落書き</strong></div>
+        <div class="stats" id="mystats"></div>
+        <div id="traits" class="hint"></div>
+      </section>
+      <button id="fight" class="primary" data-i18n="draw.fight">たたかう！</button>
+      <div class="row" style="justify-content:center;margin:0"><button id="totitle2" data-i18n="title.back">タイトルへ</button><button id="idle2" data-i18n="idle.button">放置モード</button></div>
+      <div class="hint" style="text-align:center"><span class="kbd">Enter</span> <span data-i18n="key.fight">たたかう</span> ・ <span class="kbd">Z</span> <span data-i18n="draw.undo">戻す</span> ・ <span class="kbd">1</span>-<span class="kbd">4</span> <span data-i18n="key.color">色</span> ・ <span class="kbd">Q</span><span class="kbd">W</span><span class="kbd">E</span> <span data-i18n="key.pen">太さ</span></div>
     </div>
-    <div class="stage">
-      <canvas id="arena" width="480" height="300"></canvas>
-      <div id="banner" class="banner" hidden></div>
-      <div id="toast" class="toast" hidden></div>
+    <div id="stagewrap">
+      <div class="hud">
+        <div class="hpbox"><span id="nameA"></span><div class="hp"><i id="hpA"></i></div></div>
+        <div class="hpbox right"><span id="nameB"></span><div class="hp"><i id="hpB"></i></div></div>
+      </div>
+      <div class="stage">
+        <canvas id="arena" width="1280" height="800"></canvas>
+        <div id="banner" class="banner" hidden></div>
+        <div id="toast" class="toast" hidden></div>
+      </div>
+      <div id="perks" class="row" hidden></div>
+      <div class="row" id="battlebar">
+        <button id="next" disabled data-i18n="battle.next">次のラウンド</button>
+        <button id="restart" data-i18n="battle.restart">最初から</button>
+        <button id="totitle" data-i18n="title.back">タイトルへ</button>
+        <button id="idle" data-i18n="idle.button" data-i18n-title="idle.buttonTitle" title="画面端に置いて作業しながら眺める">放置モード</button>
+        <button id="idlewindow" hidden data-i18n="idle.window" data-i18n-title="idle.windowTitle" title="常に最前面の細長ウィンドウで放置モードを開く">放置ウィンドウ</button>
+        <span class="hint"><span data-i18n="volume">音量</span> <input id="volume" type="range" min="0" max="100" step="5" style="width:120px;vertical-align:middle" /> <span id="volumelabel"></span> <span id="rendermode"></span></span>
+      </div>
+      <div id="summary" hidden>
+        <div class="row"><strong data-i18n="summary.heading">今回のラン</strong><span class="hint" data-i18n="summary.hint">使った絵と戦績。SNS 用の 1200×630 画像</span></div>
+        <canvas id="summarycard" width="1200" height="630" style="max-width:720px"></canvas>
+        <div class="row"><button id="savecard" data-i18n="summary.save">画像を保存</button><button id="copycard" data-i18n="summary.copy">画像をコピー</button><button id="sharelink" hidden data-i18n="summary.link" data-i18n-title="summary.linkTitle" title="この絵と対戦できるリンク。画像と一緒に投稿する">対戦リンクをコピー</button><span id="cardmsg" class="hint"></span></div>
+      </div>
+      <div id="log"></div>
+      <div id="idlebar"><span id="idlestats"></span><span id="idletokens"></span><button id="idleexit" data-i18n="idle.exit">描くに戻る</button></div>
+      <details style="margin-top:8px">
+        <summary class="hint" data-i18n="share.summary">友だちと対戦（共有コード）</summary>
+        <div class="row"><button id="copycode" data-i18n="share.copy">今の絵のコードをコピー</button><span id="copied" class="hint"></span></div>
+        <div class="row"><input id="pastecode" placeholder="相手のコードを貼る" data-i18n-placeholder="share.paste" style="flex:1;padding:6px;font:inherit" /><button id="usecode" data-i18n="share.use">この絵と対戦</button></div>
+        <p class="hint" data-i18n="share.hint">コードは絵そのもの。サーバ不要で、相手の落書きが次のラウンドの敵になる。</p>
+      </details>
     </div>
-    <div class="stats" id="enemystats"></div>
-    <div id="perks" class="row" hidden></div>
-    <div class="row">
-      <button id="next" disabled data-i18n="battle.next">次のラウンド</button>
-      <button id="restart" data-i18n="battle.restart">最初から</button>
-      <button id="totitle" data-i18n="title.back">タイトルへ</button>
-      <button id="idle" data-i18n="idle.button" data-i18n-title="idle.buttonTitle" title="画面端に置いて作業しながら眺める">放置モード</button>
-      <button id="idlewindow" hidden data-i18n="idle.window" data-i18n-title="idle.windowTitle" title="常に最前面の細長ウィンドウで放置モードを開く">放置ウィンドウ</button>
-    </div>
-    <div class="row"><span class="hint" data-i18n="volume">音量</span><input id="volume" type="range" min="0" max="100" step="5" style="width:140px" /><span id="volumelabel" class="hint"></span></div>
-    <div id="summary" hidden>
-      <div class="row"><strong data-i18n="summary.heading">今回のラン</strong><span class="hint" data-i18n="summary.hint">使った絵と戦績。SNS 用の 1200×630 画像</span></div>
-      <canvas id="summarycard" width="1200" height="630"></canvas>
-      <div class="row"><button id="savecard" data-i18n="summary.save">画像を保存</button><button id="copycard" data-i18n="summary.copy">画像をコピー</button><button id="sharelink" hidden data-i18n="summary.link" data-i18n-title="summary.linkTitle" title="この絵と対戦できるリンク。画像と一緒に投稿する">対戦リンクをコピー</button><span id="cardmsg" class="hint"></span></div>
-    </div>
-    <div id="log"></div>
-    <div id="idlebar"><span id="idlestats"></span><span id="idletokens"></span><button id="idleexit" data-i18n="idle.exit">描くに戻る</button></div>
-    <details style="margin-top:8px">
-      <summary class="hint" data-i18n="share.summary">友だちと対戦（共有コード）</summary>
-      <div class="row"><button id="copycode" data-i18n="share.copy">今の絵のコードをコピー</button><span id="copied" class="hint"></span></div>
-      <div class="row"><input id="pastecode" placeholder="相手のコードを貼る" data-i18n-placeholder="share.paste" style="flex:1;padding:6px;font:inherit" /><button id="usecode" data-i18n="share.use">この絵と対戦</button></div>
-      <p class="hint" data-i18n="share.hint">コードは絵そのもの。サーバ不要で、相手の落書きが次のラウンドの敵になる。</p>
-    </details>
   </section>
 </main>
 <script type="module" src="/src/main.ts"></script>

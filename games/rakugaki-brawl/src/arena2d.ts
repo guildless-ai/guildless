@@ -22,9 +22,12 @@ export class Arena2D implements ArenaRenderer {
     const { ctx, canvas } = this;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Logical arena is 480 wide; scale to whatever resolution the canvas has.
+    const k = canvas.width / 480;
+    ctx.scale(k, k);
     if (s.shake > 0) ctx.translate((Math.random() - 0.5) * s.shake * 2, (Math.random() - 0.5) * s.shake * 2);
     ctx.fillStyle = '#f1ede2';
-    ctx.fillRect(0, 220, canvas.width, Math.max(0, canvas.height - 220));
+    ctx.fillRect(0, 220, canvas.width / k, Math.max(0, canvas.height / k - 220));
     if (this.a) this.blit(this.a, s.xA, 220, 1, s.poseA, s.phaseA, s.t, s.flashA);
     if (this.b) this.blit(this.b, s.xB, 220, -1, s.poseB, s.phaseB, s.t, s.flashB);
     for (const p of s.popups) {

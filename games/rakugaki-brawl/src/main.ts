@@ -34,11 +34,15 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const pad = $<HTMLCanvasElement>('pad');
 const arena = $<HTMLCanvasElement>('arena');
 const padCtx = pad.getContext('2d')!;
+/** Logical drawing size (stats, ink costs and share codes are all in these units); the canvas is 2x for crispness. */
+const PAD_W = 480, PAD_H = 360, PAD_K = pad.width / PAD_W;
+const preview = $<HTMLCanvasElement>('preview');
+const previewCtx = preview.getContext('2d')!;
 const renderer: ArenaRenderer = Arena3D.supported(arena) ? new Arena3D(arena) : new Arena2D(arena);
 $('rendermode').textContent = renderer instanceof Arena3D ? '3D' : '2D';
 
 let run: RunState = newRun();
-let drawing: Drawing = { strokes: [], width: pad.width, height: pad.height };
+let drawing: Drawing = { strokes: [], width: PAD_W, height: PAD_H };
 let current: Stroke | null = null;
 let color: Color = 'black';
 let penWidth = 8;
@@ -56,13 +60,17 @@ const enemyBudget = (round: number) => Math.round(inkBudget(round) * enemyInkSca
 // ---------- drawing pad ----------
 function canvasPoint(e: PointerEvent): Point {
   const r = pad.getBoundingClientRect();
-  return { x: ((e.clientX - r.left) / r.width) * pad.width, y: ((e.clientY - r.top) / r.height) * pad.height };
+  // object-fit: contain may letterbox the canvas inside its box; map through the drawn area only.
+  const boxAspect = r.width / r.height, padAspect = PAD_W / PAD_H;
+  let w = r.width, h = r.height, ox = 0, oy = 0;
+  if (boxAspect > padAspect) { w = r.height * padAspect; ox = (r.width - w) / 2; } else { h = r.width / padAspect; oy = (r.height - h) / 2; }
+  return { x: ((e.clientX - r.left - ox) / w) * PAD_W, y: ((e.clientY - r.top - oy) / h) * PAD_H };
 }
 
 pad.addEventListener('pointerdown', (e) => {
   if (busy || remainingInk() <= 0) return;
   pad.setPointerCapture(e.pointerId);
-  current = { points: [canvasPoint(e)], color, width: penWidth };
+  current = { points: [canvasPoint(e)], color, width: penFor(e) };
   drawing.strokes.push(current);
   redrawPad();
 });
@@ -79,12 +87,19 @@ const endStroke = () => { current = null; redrawPad(); };
 pad.addEventListener('pointerup', endStroke);
 pad.addEventListener('pointercancel', endStroke);
 
+/** Pen width for this pointer: pressure-sensitive pens get 0.6x-1.4x, mice get the selected width. */
+function penFor(e: PointerEvent): number {
+  const pr = e.pointerType === 'pen' && e.pressure > 0 ? 0.6 + e.pressure * 0.8 : 1;
+  return Math.round(penWidth * pr);
+}
+
 function remainingInk(): number {
   return budget() - totalInk(drawing);
 }
 
 function redrawPad(): void {
-  padCtx.clearRect(0, 0, pad.width, pad.height);
+  padCtx.setTransform(PAD_K, 0, 0, PAD_K, 0, 0);
+  padCtx.clearRect(0, 0, PAD_W, PAD_H);
   drawDrawing(padCtx, drawing);
   const total = budget();
   const left = Math.max(0, remainingInk());
@@ -117,22 +132,68 @@ function jp(c: Color): string {
   return t(`color.${c}` as Key);
 }
 
-// palette
+// palette (vertical toolbar)
 const palette = $('palette');
-(['black', 'red', 'green', 'blue'] as Color[]).forEach((c) => {
+const colorKeys: Color[] = ['black', 'red', 'green', 'blue'];
+function setColor(c: Color): void {
+  color = c;
+  palette.querySelectorAll<HTMLElement>('.swatch').forEach((x) => x.classList.toggle('active', x.dataset.color === c));
+}
+colorKeys.forEach((c, i) => {
   const b = document.createElement('div');
   b.className = 'swatch' + (c === color ? ' active' : '');
+  b.dataset.color = c;
   b.style.background = CSS[c];
-  b.title = jp(c);
-  b.onclick = () => { color = c; palette.querySelectorAll('.swatch').forEach((x) => x.classList.remove('active')); b.classList.add('active'); };
+  b.title = `${jp(c)} [${i + 1}]`;
+  b.onclick = () => setColor(c);
   palette.appendChild(b);
 });
-[4, 8, 14].forEach((w) => {
+palette.appendChild(document.createElement('hr'));
+const PEN_SIZES = [4, 8, 14];
+function setPen(w: number): void {
+  penWidth = w;
+  palette.querySelectorAll<HTMLElement>('.pen').forEach((x) => x.classList.toggle('active', Number(x.dataset.w) === w));
+}
+PEN_SIZES.forEach((w, i) => {
   const b = document.createElement('button');
-  b.textContent = t(w === 4 ? 'pen.thin' : w === 8 ? 'pen.mid' : 'pen.thick');
-  b.onclick = () => { penWidth = w; };
+  b.className = 'pen' + (w === penWidth ? ' active' : '');
+  b.dataset.w = String(w);
+  b.title = `${t(w === 4 ? 'pen.thin' : w === 8 ? 'pen.mid' : 'pen.thick')} [${'QWE'[i]}]`;
+  b.innerHTML = `<i style="width:${w * 1.6}px;height:${w * 1.6}px"></i>`;
+  b.onclick = () => setPen(w);
   palette.appendChild(b);
 });
+palette.appendChild(document.createElement('hr'));
+for (const [id, key, label] of [['undo', 'Z', t('draw.undo')], ['clear', 'C', t('draw.clear')]] as const) {
+  const b = document.createElement('button');
+  b.id = id; b.innerHTML = `${label}<br><span class="key">${key}</span>`;
+  palette.appendChild(b);
+}
+
+// keyboard: 1-4 colour, Q/W/E pen, Z undo, C clear, Enter fight / next round / perk 1, Esc title
+window.addEventListener('keydown', (e) => {
+  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement) return;
+  if (!document.body.classList.contains('ingame') || idle) return;
+  const k = e.key.toLowerCase();
+  if (k >= '1' && k <= '4') setColor(colorKeys[Number(k) - 1]);
+  else if (k === 'q' || k === 'w' || k === 'e') setPen(PEN_SIZES['qwe'.indexOf(k)]);
+  else if (k === 'z' && !e.ctrlKey && !e.metaKey) $('undo').click();
+  else if (k === 'z') $('undo').click();
+  else if (k === 'c') $('clear').click();
+  else if (k === 'enter') {
+    const fight = $<HTMLButtonElement>('fight'), next = $<HTMLButtonElement>('next'), perk = document.querySelector<HTMLButtonElement>('#perks:not([hidden]) .perk');
+    if (document.body.classList.contains('phase-draw') && !fight.disabled) fight.click();
+    else if (perk) perk.click();
+    else if (!next.disabled) next.click();
+  }
+  else if (k === 'escape') $('totitle').click();
+});
+
+/** Switch between the drawing phase (big pad, opponent preview) and the battle phase (big arena). */
+function setPhase(phase: 'draw' | 'battle'): void {
+  document.body.classList.toggle('phase-draw', phase === 'draw');
+  document.body.classList.toggle('phase-battle', phase === 'battle');
+}
 
 /** End-of-run card: every doodle you used, win/lose per round, save or copy as PNG. */
 function showSummary(): void {
@@ -189,7 +250,7 @@ function enterIdle(): void {
   }
   idle = loadIdle(localStorage) ?? newIdle();
   document.body.classList.add('idle');
-  arena.width = 960; arena.height = 220;
+  arena.width = 1920; arena.height = 440;
   renderer.resize();
   redrawPad();
   idleWave();
@@ -201,7 +262,7 @@ function exitIdle(): void {
   sfx.enabled = true;
   idle = null;
   document.body.classList.remove('idle');
-  arena.width = 480; arena.height = 300;
+  arena.width = 1280; arena.height = 800;
   renderer.resize();
   busy = false;
   startRound(false, true);
@@ -308,6 +369,8 @@ $('titleidle').onclick = () => { document.body.classList.add('ingame'); enterIdl
 $('showach').onclick = () => { $('gallery').classList.remove('open'); if ($('achlist').classList.toggle('open')) $('achlist').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); };
 $('showgallery').onclick = () => { $('achlist').classList.remove('open'); if ($('gallery').classList.toggle('open')) $('gallery').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); };
 $('totitle').onclick = toTitle;
+$('totitle2').onclick = toTitle;
+$('idle2').onclick = () => $('idle').click();
 $('langtoggle2').onclick = () => $('langtoggle').click();
 
 $('langtoggle').onclick = () => { setLang(lang() === 'ja' ? 'en' : 'ja', localStorage); const u = new URL(location.href); u.searchParams.delete('lang'); location.href = u.toString(); };
@@ -339,6 +402,7 @@ $('fight').onclick = () => {
   sfx.unlock();
   busy = true;
   $<HTMLButtonElement>('fight').disabled = true;
+  setPhase('battle');
   const a = makeFighter(t('you'), structuredClone(drawing), 60, applyPerks(run.perks));
   const b = makeFighter(enemy.name, structuredClone(enemy.drawing), ARENA_W - 60);
   const result = simulate(a, b, run.seed + run.round);
@@ -443,8 +507,8 @@ function replay(a: Fighter, b: Fighter, events: BattleEvent[], done: () => void)
       if (gap > b.stats.reach) { xB -= 90 * dt; movedB = true; }
     }
     flashLife = Math.max(0, flashLife - dt);
-    for (const p of popups) p.life -= dt * 0.9;
-    while (popups.length && popups[0].life <= 0) popups.shift();
+    for (const p of popups) p.life -= dt * 1.4;
+    while (popups.length && (popups[0].life <= 0 || popups.length > 6)) popups.shift();
     const phaseA = phaseAt(events, 'a', tm, movedA), phaseB = phaseAt(events, 'b', tm, movedB);
     renderer.draw({
       t: tm, xA, xB,
@@ -537,7 +601,7 @@ $('usecode').onclick = () => {
 
 function startRound(fresh: boolean, keepDrawing = false): void {
   if (fresh) $('log').textContent = '';
-  if (!keepDrawing) drawing = { strokes: [], width: pad.width, height: pad.height };
+  if (!keepDrawing) drawing = { strokes: [], width: PAD_W, height: PAD_H };
   $('perks').hidden = true;
   if (challenger) { enemy = challenger; challenger = null; }
   else {
@@ -553,9 +617,24 @@ function startRound(fresh: boolean, keepDrawing = false): void {
   const b = makeFighter(enemy.name, enemy.drawing, ARENA_W - 60);
   renderStats($('enemystats'), b.stats);
   renderer.preview(viewOf(b), ARENA_W - 60);
+  drawPreview(b);
   hud('', t('nextEnemy', { name: enemy.name }), '#222', CSS[b.stats.element], 0, 1);
   updateStatus();
+  if (!idle) setPhase('draw');
   redrawPad();
+}
+
+/** Opponent card on the drawing screen: name, the doodle itself, element colour. */
+function drawPreview(b: Fighter): void {
+  const c = previewCtx;
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.clearRect(0, 0, preview.width, preview.height);
+  c.fillStyle = '#f1ede2'; c.fillRect(0, 230, preview.width, 70);
+  const d = b.drawing;
+  const k = Math.min((preview.width - 40) / d.width, 200 / d.height);
+  c.save(); c.translate((preview.width - d.width * k) / 2, 230 - d.height * k); c.scale(k, k); drawDrawing(c, d); c.restore();
+  c.fillStyle = CSS[b.stats.element]; c.font = 'bold 20px system-ui'; c.textAlign = 'center';
+  c.fillText(b.name, preview.width / 2, 268);
 }
 
 function updateStatus(): void {
