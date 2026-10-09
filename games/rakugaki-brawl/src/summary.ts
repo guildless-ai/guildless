@@ -1,4 +1,5 @@
 import { analyze } from './analyze.js';
+import { t } from './i18n.js';
 import { drawDrawing } from './render.js';
 import type { RunState } from './run.js';
 import type { Drawing } from './types.js';
@@ -36,7 +37,7 @@ export function cardLayout(count: number, w = CARD_W, h = CARD_H): CardLayout {
 
 export function cardTitle(run: RunState, history: RoundRecord[]): string {
   const wins = history.filter((r) => r.result === 'win').length;
-  return run.lives > 0 && history.length >= 10 ? `完走！ ${wins}勝` : `${history.length}ラウンド ${wins}勝で力尽きた`;
+  return run.lives > 0 && history.length >= 10 ? t('summary.clear', { wins }) : t('summary.dead', { rounds: history.length, wins });
 }
 
 /**
@@ -53,7 +54,7 @@ export function renderSummaryCard(run: RunState, history: RoundRecord[], canvas:
   ctx.fillText(cardTitle(run, history), 40, 36);
   ctx.font = '26px system-ui, "Hiragino Sans", sans-serif';
   ctx.fillStyle = '#8a8378';
-  ctx.fillText(`らくがきブロウル ・ 強化 ${run.perks.length} ・ seed ${run.seed}`, 42, 104);
+  ctx.fillText(t('summary.sub', { perks: run.perks.length, seed: run.seed }), 42, 104);
 
   const L = cardLayout(history.length);
   history.slice(0, 10).forEach((rec, i) => {
@@ -88,7 +89,7 @@ export function renderSummaryCard(run: RunState, history: RoundRecord[], canvas:
   ctx.textAlign = 'right';
   ctx.fillStyle = '#8a8378';
   ctx.font = '20px system-ui, sans-serif';
-  ctx.fillText('#らくがきブロウル', CARD_W - 40, CARD_H - 40);
+  ctx.fillText(t('summary.tag'), CARD_W - 40, CARD_H - 40);
   return canvas;
 }
 

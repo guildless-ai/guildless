@@ -6,6 +6,7 @@ import { ARENA_W, makeFighter, simulate, type BattleEvent, type Fighter } from '
 import { generateEnemy } from './enemy.js';
 import { afterWave, idleBudget, loadIdle, newIdle, saveIdle, type IdleState } from './idle.js';
 import { loadGallery, pickRival, saveWinner } from './gallery.js';
+import { applyStatic, detectLang, LANG_KEY, lang, setLang, t, type Key } from './i18n.js';
 import { applyPerks, offerPerks, type Perk } from './perks.js';
 import { ACHIEVEMENTS, bankIdleTokens, LocalPlatform, spendTokens, type AchievementId } from './platform.js';
 import { CSS, drawDrawing, makeFrameFactory } from './render.js';
@@ -19,6 +20,15 @@ import type { Color, Drawing, Point, Stats, Stroke } from './types.js';
 import type { ArenaRenderer, FighterView, Popup } from './view.js';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+
+{
+  let stored: string | null = null;
+  try { stored = localStorage.getItem(LANG_KEY); } catch { /* ignore */ }
+  setLang(detectLang(location.search, stored, navigator.language));
+  applyStatic(document);
+  document.documentElement.lang = lang();
+  document.title = t('title');
+}
 const pad = $<HTMLCanvasElement>('pad');
 const arena = $<HTMLCanvasElement>('arena');
 const padCtx = pad.getContext('2d')!;
@@ -30,13 +40,13 @@ let drawing: Drawing = { strokes: [], width: pad.width, height: pad.height };
 let current: Stroke | null = null;
 let color: Color = 'black';
 let penWidth = 8;
-let enemy = generateEnemy(run.round, inkBudget(run.round), run.seed);
+let enemy: { name: string; drawing: Drawing; kind: 'gen' | 'rival' | 'friend' } = { ...generateEnemy(run.round, inkBudget(run.round), run.seed), kind: 'gen' };
 const sfx = new Sfx();
 const platform = new LocalPlatform(localStorage);
 let history: RoundRecord[] = [];
 let busy = false;
 /** A doodle pasted from a share code; used as the next enemy instead of a generated one. */
-let challenger: { name: string; drawing: Drawing } | null = null;
+let challenger: { name: string; drawing: Drawing; kind: 'friend' } | null = null;
 
 const budget = () => inkBudget(run.round, applyPerks(run.perks).inkBonus);
 
@@ -84,8 +94,8 @@ function redrawPad(): void {
 function renderStats(el: HTMLElement, s: Stats | null): void {
   if (!s) { el.innerHTML = ''; return; }
   el.innerHTML = [
-    `<div>HP ${s.hp}</div>`, `<div>攻撃 ${s.atk}</div>`, `<div>速さ ${s.spd}/s</div>`,
-    `<div>リーチ ${s.reach}</div>`, `<div style="color:${CSS[s.element]}">属性 ${jp(s.element)} (トゲ${s.spikes})</div>`,
+    `<div>HP ${s.hp}</div>`, `<div>${t('stat.atk')} ${s.atk}</div>`, `<div>${t('stat.spd')} ${s.spd}/s</div>`,
+    `<div>${t('stat.reach')} ${s.reach}</div>`, `<div style="color:${CSS[s.element]}">${t('stat.element')} ${jp(s.element)} (${t('stat.spikes')}${s.spikes})</div>`,
     `<div style="grid-column: 1 / -1">${traitTags(s)}</div>`,
   ].join('');
 }
@@ -93,15 +103,15 @@ function renderStats(el: HTMLElement, s: Stats | null): void {
 /** Human-readable tags for shape traits so players learn what drawing choices do. */
 function traitTags(s: Stats): string {
   const tags: string[] = [];
-  if (s.armor > 0) tags.push(`盾${s.armor}（輪 → 被ダメ -${s.armor}）`);
-  if (s.traits.eyes > 0) tags.push(`目${s.traits.eyes}（クリ +${Math.round(s.critBonus * 100)}%）`);
-  if (s.traits.legs > 0) tags.push(`脚${s.traits.legs}（速さ +${(Math.min(4, s.traits.legs) * 0.1).toFixed(1)}）`);
-  if (s.traits.arms > 0) tags.push(`腕${s.traits.arms}（攻撃 +${Math.min(4, s.traits.arms) * 2}）`);
-  return tags.length ? tags.join(' ・ ') : '形の特性なし（輪・目・脚・腕を描くと付く）';
+  if (s.armor > 0) tags.push(t('trait.shield', { n: s.armor }));
+  if (s.traits.eyes > 0) tags.push(t('trait.eyes', { n: s.traits.eyes, pct: Math.round(s.critBonus * 100) }));
+  if (s.traits.legs > 0) tags.push(t('trait.legs', { n: s.traits.legs, v: (Math.min(4, s.traits.legs) * 0.1).toFixed(1) }));
+  if (s.traits.arms > 0) tags.push(t('trait.arms', { n: s.traits.arms, v: Math.min(4, s.traits.arms) * 2 }));
+  return tags.length ? tags.join(' ・ ') : t('trait.none');
 }
 
 function jp(c: Color): string {
-  return { black: '黒', red: '赤', green: '緑', blue: '青' }[c];
+  return t(`color.${c}` as Key);
 }
 
 // palette
@@ -116,7 +126,7 @@ const palette = $('palette');
 });
 [4, 8, 14].forEach((w) => {
   const b = document.createElement('button');
-  b.textContent = w === 4 ? '細' : w === 8 ? '中' : '太';
+  b.textContent = t(w === 4 ? 'pen.thin' : w === 8 ? 'pen.mid' : 'pen.thick');
   b.onclick = () => { penWidth = w; };
   palette.appendChild(b);
 });
@@ -138,17 +148,17 @@ function showSummary(): void {
     if (!best) return;
     // A link that opens the game with this doodle as the challenger.
     const url = `${location.origin}${location.pathname}?code=${encodeDrawing(best.drawing)}`;
-    try { await navigator.clipboard.writeText(url); $('cardmsg').textContent = `対戦リンクをコピーした (${url.length}文字)`; }
-    catch { $<HTMLInputElement>('pastecode').value = url; $('cardmsg').textContent = 'リンクを下の欄に出した'; }
+    try { await navigator.clipboard.writeText(url); $('cardmsg').textContent = t('summary.linkCopied', { n: url.length }); }
+    catch { $<HTMLInputElement>('pastecode').value = url; $('cardmsg').textContent = t('summary.linkFallback'); }
   };
   $('copycard').onclick = async () => {
     try {
       const blob = await new Promise<Blob | null>((res) => card.toBlob(res, 'image/png'));
       if (!blob) throw new Error('no blob');
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-      $('cardmsg').textContent = '画像をコピーした';
+      $('cardmsg').textContent = t('summary.copied');
     } catch {
-      $('cardmsg').textContent = 'コピーできない環境。保存を使って';
+      $('cardmsg').textContent = t('summary.copyFail');
     }
   };
 }
@@ -171,7 +181,7 @@ function enterIdle(): void {
   if (drawing.strokes.length === 0) {
     const g = loadGallery(localStorage);
     const pick = g.length ? pickRival(g, 99, mulberry32(Date.now() % 100000)) ?? pickRival(g, g[g.length - 1].round, mulberry32(1)) : null;
-    if (!pick) { log('放置モードには絵が要る。何か描くか一勝してから'); return; }
+    if (!pick) { log(t('idle.needDrawing')); return; }
     drawing = pick.drawing;
   }
   idle = loadIdle(localStorage) ?? newIdle();
@@ -197,13 +207,13 @@ function exitIdle(): void {
 function idleWave(): void {
   if (!idle) return;
   const st = idle;
-  const a = makeFighter('あなたの絵', structuredClone(drawing), 60, applyPerks(run.perks));
+  const a = makeFighter(t('idle.you'), structuredClone(drawing), 60, applyPerks(run.perks));
   const foe = generateEnemy(Math.min(10, 1 + Math.floor((st.wave - 1) / 2)), idleBudget(st.wave), st.seed + st.wave * 101);
   const b = makeFighter(`${foe.name} (wave ${st.wave})`, foe.drawing, ARENA_W - 60);
   const result = simulate(a, b, st.seed + st.wave);
   sfx.enabled = false;
   busy = true;
-  $('idlestats').textContent = `wave ${st.wave} ・ ${st.wins} 勝 ・ 連勝 ${st.streak}（最高 ${st.bestStreak}）`;
+  $('idlestats').textContent = t('idle.stats', { wave: st.wave, wins: st.wins, streak: st.streak, best: st.bestStreak });
   replay(a, b, result.events, () => {
     busy = false;
     banner(null);
@@ -213,8 +223,8 @@ function idleWave(): void {
     saveIdle(localStorage, idle);
     const tokens = bankIdleTokens(localStorage, prevWins, idle.wins);
     if (idle.streak >= 5) achieve('idle_streak_5');
-    $('idletokens').textContent = tokens ? `インク壺 ×${tokens}（次のランで使う）` : '';
-    $('idlestats').textContent = `wave ${idle.wave} ・ ${idle.wins} 勝 ・ 連勝 ${idle.streak}（最高 ${idle.bestStreak}）`;
+    $('idletokens').textContent = tokens ? t('idle.tokens', { n: tokens }) : '';
+    $('idlestats').textContent = t('idle.stats', { wave: idle.wave, wins: idle.wins, streak: idle.streak, best: idle.bestStreak });
     idleTimer = window.setTimeout(idleWave, 1200);
   });
 }
@@ -223,9 +233,12 @@ function idleWave(): void {
 {
   const slider = $<HTMLInputElement>('volume');
   slider.value = String(Math.round(sfx.volume * 100));
-  slider.oninput = () => { sfx.setVolume(Number(slider.value) / 100); $('volumelabel').textContent = sfx.volume === 0 ? 'ミュート' : `${Math.round(sfx.volume * 100)}%`; };
-  $('volumelabel').textContent = sfx.volume === 0 ? 'ミュート' : `${Math.round(sfx.volume * 100)}%`;
+  const label = () => { $('volumelabel').textContent = sfx.volume === 0 ? t('volume.mute') : `${Math.round(sfx.volume * 100)}%`; };
+  slider.oninput = () => { sfx.setVolume(Number(slider.value) / 100); label(); };
+  label();
 }
+
+$('langtoggle').onclick = () => { setLang(lang() === 'ja' ? 'en' : 'ja', localStorage); const u = new URL(location.href); u.searchParams.delete('lang'); location.href = u.toString(); };
 
 $('idle').onclick = enterIdle;
 $('idleexit').onclick = exitIdle;
@@ -245,7 +258,7 @@ $('restart').onclick = () => {
   $('summary').hidden = true;
   run = startRunWithTokens();
   startRound(true); // clears the log, so report the carried tokens afterwards
-  if (run.perks.length) log(`放置モードの報酬: インク壺 ×${run.perks.length} を持ち込み`);
+  if (run.perks.length) log(t('idle.carry', { n: run.perks.length }));
 };
 $('next').onclick = () => startRound(false);
 
@@ -260,29 +273,29 @@ $('fight').onclick = () => {
   sfx.unlock();
   busy = true;
   $<HTMLButtonElement>('fight').disabled = true;
-  const a = makeFighter('あなた', structuredClone(drawing), 60, applyPerks(run.perks));
+  const a = makeFighter(t('you'), structuredClone(drawing), 60, applyPerks(run.perks));
   const b = makeFighter(enemy.name, structuredClone(enemy.drawing), ARENA_W - 60);
   const result = simulate(a, b, run.seed + run.round);
-  log(`ラウンド ${run.round}: ${a.name} (${a.stats.hp}HP/${a.stats.atk}ATK) vs ${b.name} (${b.stats.hp}HP/${b.stats.atk}ATK)`);
+  log(t('round.log', { round: run.round, a: a.name, ahp: a.stats.hp, aatk: a.stats.atk, b: b.name, bhp: b.stats.hp, batk: b.stats.atk }));
   replay(a, b, result.events, () => {
     const wonRound = run.round;
     history.push({ round: run.round, drawing: structuredClone(a.drawing), enemyName: enemy.name, result: result.winner === 'a' ? 'win' : result.winner === 'b' ? 'lose' : 'draw' });
     run = applyResult(run, result.winner);
-    log(result.winner === 'a' ? '勝ち！' : result.winner === 'b' ? '負け…' : '相打ち');
+    log(t(result.winner === 'a' ? 'win' : result.winner === 'b' ? 'lose' : 'draw'));
     banner(null);
     if (result.winner === 'a') {
       saveWinner(localStorage, a.drawing, wonRound);
       achieve('first_win');
       const t = a.stats.traits;
       if (a.stats.armor > 0 && t.eyes > 0 && t.legs > 0 && t.arms > 0) achieve('full_creature');
-      if (enemy.name.startsWith('むかしの自分')) achieve('beat_rival');
+      if (enemy.kind === 'rival') achieve('beat_rival');
       if (run.over && run.lives > 0) achieve('clear_run');
     }
-    if (enemy.name === 'ともだちの絵') achieve('share_fight');
+    if (enemy.kind === 'friend') achieve('share_fight');
     busy = false;
     updateStatus();
     if (run.over) {
-      log(run.lives <= 0 ? `ゲームオーバー。${run.wins} 勝` : `完走！ ${run.wins} 勝 / ${MAX_ROUNDS} 戦`);
+      log(run.lives <= 0 ? t('gameover', { wins: run.wins }) : t('cleared', { wins: run.wins, max: MAX_ROUNDS }));
       $<HTMLButtonElement>('next').disabled = true;
       showSummary();
     } else if (result.winner === 'a') {
@@ -320,13 +333,13 @@ function replay(a: Fighter, b: Fighter, events: BattleEvent[], done: () => void)
   const frame = (now: number) => {
     if (now < pauseUntil) { frozen += (now - lastNow) / 1000; lastNow = now; }
     else lastNow = now;
-    const t = (now - start) / 1000 - frozen;
+    const tm = (now - start) / 1000 - frozen;
     // Wind-up whoosh slightly before each hit lands.
-    while (nextSwing < events.length && events[nextSwing].t - swingLead <= t) {
+    while (nextSwing < events.length && events[nextSwing].t - swingLead <= tm) {
       if (events[nextSwing].kind === 'hit') sfx.swing();
       nextSwing++;
     }
-    while (!finished && i < events.length && events[i].t <= t) {
+    while (!finished && i < events.length && events[i].t <= tm) {
       const ev = events[i++];
       if (ev.kind === 'hit') {
         const big = ev.crit || ev.mult > 1;
@@ -335,15 +348,15 @@ function replay(a: Fighter, b: Fighter, events: BattleEvent[], done: () => void)
         flash = ev.from === 'a' ? 'b' : 'a';
         flashLife = 0.12;
         if (big) pauseUntil = now + 90;
-        const text = (ev.crit ? '!! ' : '') + ev.dmg + (ev.mult > 1 ? ' 効果大' : ev.mult < 1 ? ' いまいち' : '');
+        const text = (ev.crit ? '!! ' : '') + ev.dmg + (ev.mult > 1 ? t('hit.super') : ev.mult < 1 ? t('hit.weak') : '');
         if (ev.from === 'a') { hpB -= ev.dmg; popups.push({ x: xB, text, color: CSS[a.stats.element], life: 1 }); }
         else { hpA -= ev.dmg; popups.push({ x: xA, text, color: CSS[b.stats.element], life: 1 }); }
       } else {
         finished = true;
-        endAt = t + 2.2; // KO topple, then the winner's victory hops
-        if (ev.winner === 'a') { sfx.win(); banner('勝ち！', CSS[a.stats.element]); }
-        else if (ev.winner === 'b') { sfx.lose(); banner('負け…', '#8a8378'); }
-        else banner('相打ち', '#8a8378');
+        endAt = tm + 2.2; // KO topple, then the winner's victory hops
+        if (ev.winner === 'a') { sfx.win(); banner(t('win'), CSS[a.stats.element]); }
+        else if (ev.winner === 'b') { sfx.lose(); banner(t('lose'), '#8a8378'); }
+        else banner(t('draw'), '#8a8378');
       }
     }
     // Walk until within reach (mirrors the simulation).
@@ -357,9 +370,9 @@ function replay(a: Fighter, b: Fighter, events: BattleEvent[], done: () => void)
     flashLife = Math.max(0, flashLife - dt);
     for (const p of popups) p.life -= dt * 0.9;
     while (popups.length && popups[0].life <= 0) popups.shift();
-    const phaseA = phaseAt(events, 'a', t, movedA), phaseB = phaseAt(events, 'b', t, movedB);
+    const phaseA = phaseAt(events, 'a', tm, movedA), phaseB = phaseAt(events, 'b', tm, movedB);
     renderer.draw({
-      t, xA, xB,
+      t: tm, xA, xB,
       poseA: poseOf(phaseA), poseB: poseOf(phaseB), phaseA, phaseB,
       hpA, hpB, hpA0, hpB0, popups, shake,
       flashA: flash === 'a' && flashLife > 0,
@@ -367,7 +380,7 @@ function replay(a: Fighter, b: Fighter, events: BattleEvent[], done: () => void)
     });
     shake = Math.max(0, shake - 0.6);
     hud(a.name, b.name, CSS[a.stats.element], CSS[b.stats.element], hpA / hpA0, hpB / hpB0);
-    if (t >= endAt) { done(); return; }
+    if (tm >= endAt) { done(); return; }
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);
@@ -392,10 +405,11 @@ function hud(nameA: string, nameB: string, colA: string, colB: string, ratioA: n
 /** Unlock an achievement and toast it the first time. */
 function achieve(id: AchievementId): void {
   if (!platform.unlock(id)) return;
-  const a = ACHIEVEMENTS[id];
-  log(`実績解除: ${a.name} ― ${a.desc}`);
+  void ACHIEVEMENTS;
+  const name = t(`ach.${id}.name` as Key), desc = t(`ach.${id}.desc` as Key);
+  log(t('ach.unlocked', { name, desc }));
   const el = $('toast');
-  el.textContent = `実績解除　${a.name}`;
+  el.textContent = t('ach.toast', { name });
   el.hidden = false;
   el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
   window.setTimeout(() => { el.hidden = true; }, 2600);
@@ -415,10 +429,10 @@ function showPerks(): void {
   for (const perk of offers) {
     const b = document.createElement('button');
     b.className = 'perk';
-    b.innerHTML = `<strong>${perk.name}</strong><small>${perk.desc}</small>`;
+    b.innerHTML = `<strong>${t(`perk.${perk.id}.name` as Key)}</strong><small>${t(`perk.${perk.id}.desc` as Key)}</small>`;
     b.onclick = () => {
       run = { ...run, perks: [...run.perks, perk.id] };
-      log(`アップグレード: ${perk.name}`);
+      log(t('perk.picked', { name: t(`perk.${perk.id}.name` as Key) }));
       box.hidden = true;
       startRound(false);
     };
@@ -428,21 +442,21 @@ function showPerks(): void {
 
 // ---------- share codes ----------
 $('copycode').onclick = async () => {
-  if (drawing.strokes.length === 0) { $('copied').textContent = 'まず何か描いて'; return; }
+  if (drawing.strokes.length === 0) { $('copied').textContent = t('share.drawFirst'); return; }
   const code = encodeDrawing(drawing);
-  try { await navigator.clipboard.writeText(code); $('copied').textContent = `コピーした (${code.length}文字)`; }
-  catch { $<HTMLInputElement>('pastecode').value = code; $('copied').textContent = '下の欄に出した'; }
+  try { await navigator.clipboard.writeText(code); $('copied').textContent = t('share.copied', { n: code.length }); }
+  catch { $<HTMLInputElement>('pastecode').value = code; $('copied').textContent = t('share.fallback'); }
 };
 $('usecode').onclick = () => {
   const code = $<HTMLInputElement>('pastecode').value;
   try {
     const d = decodeDrawing(code);
     if (d.strokes.length === 0) throw new Error('empty drawing');
-    challenger = { name: 'ともだちの絵', drawing: d };
-    log('次のラウンドは共有コードの絵と対戦');
+    challenger = { name: t('friend'), drawing: d, kind: 'friend' };
+    log(t('share.next'));
     if (!busy) startRound(false, true);
   } catch (e) {
-    log(`コードを読めない: ${(e as Error).message}`);
+    log(t('share.bad', { msg: (e as Error).message }));
   }
 };
 
@@ -457,21 +471,21 @@ function startRound(fresh: boolean, keepDrawing = false): void {
       ? pickRival(loadGallery(localStorage), run.round, mulberry32(run.seed * 17 + run.round))
       : null;
     enemy = rival
-      ? { name: `むかしの自分 (R${rival.entry.round})`, drawing: rival.drawing }
-      : generateEnemy(run.round, inkBudget(run.round), run.seed);
+      ? { name: t('rival', { round: rival.entry.round }), drawing: rival.drawing, kind: 'rival' }
+      : { ...generateEnemy(run.round, inkBudget(run.round), run.seed), kind: 'gen' };
   }
   $<HTMLButtonElement>('next').disabled = true;
   const b = makeFighter(enemy.name, enemy.drawing, ARENA_W - 60);
   renderStats($('enemystats'), b.stats);
   renderer.preview(viewOf(b), ARENA_W - 60);
-  hud('', `次の相手: ${enemy.name}`, '#222', CSS[b.stats.element], 0, 1);
+  hud('', t('nextEnemy', { name: enemy.name }), '#222', CSS[b.stats.element], 0, 1);
   updateStatus();
   redrawPad();
 }
 
 function updateStatus(): void {
-  const perks = run.perks.length ? ` ・ 強化 ${run.perks.length}` : '';
-  $('status').textContent = `ラウンド ${Math.min(run.round, MAX_ROUNDS)}/${MAX_ROUNDS} ・ 残機 ${'♥'.repeat(run.lives)} ・ ${run.wins} 勝${perks}`;
+  const perks = run.perks.length ? t('status.perks', { n: run.perks.length }) : '';
+  $('status').textContent = t('status', { round: Math.min(run.round, MAX_ROUNDS), max: MAX_ROUNDS, lives: '♥'.repeat(run.lives), wins: run.wins }) + perks;
   $('roundinfo').textContent = `seed ${run.seed}`;
 }
 
@@ -482,8 +496,8 @@ startRound(true);
   if (code) {
     try {
       const d = decodeDrawing(code);
-      if (d.strokes.length) { challenger = { name: 'ともだちの絵', drawing: d }; log('リンクの絵が次の相手'); startRound(false, true); }
-    } catch { log('リンクのコードを読めない'); }
+      if (d.strokes.length) { challenger = { name: t('friend'), drawing: d, kind: 'friend' }; log(t('share.linkNext')); startRound(false, true); }
+    } catch { log(t('share.linkBad')); }
   }
   if (params.has('idle')) enterIdle();
 }

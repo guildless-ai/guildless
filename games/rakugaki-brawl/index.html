@@ -54,30 +54,30 @@
 </head>
 <body>
 <header>
-  <h1>らくがきブロウル <span class="hint">prototype</span></h1>
+  <h1><span data-i18n="title">らくがきブロウル</span> <span class="hint">prototype</span> <button id="langtoggle" data-i18n="lang.toggle" style="margin-left:8px;padding:2px 8px;font-size:12px">English</button></h1>
   <div id="status"></div>
 </header>
 <main>
   <section id="draw">
     <div class="row">
-      <strong>描く</strong>
-      <span class="hint">インクは有限。何を描く？</span>
+      <strong data-i18n="draw.heading">描く</strong>
+      <span class="hint" data-i18n="draw.hint">インクは有限。何を描く？</span>
     </div>
     <canvas id="pad" width="480" height="360"></canvas>
     <div class="row">
-      <span>インク</span><div class="meter"><i id="inkbar"></i></div><span id="inktext"></span>
+      <span data-i18n="draw.ink">インク</span><div class="meter"><i id="inkbar"></i></div><span id="inktext"></span>
     </div>
     <div class="row" id="palette"></div>
     <div class="row">
-      <button id="undo">戻す</button>
-      <button id="clear">消す</button>
-      <button id="fight" class="primary">たたかう！</button>
+      <button id="undo" data-i18n="draw.undo">戻す</button>
+      <button id="clear" data-i18n="draw.clear">消す</button>
+      <button id="fight" class="primary" data-i18n="draw.fight">たたかう！</button>
     </div>
     <div class="stats" id="mystats"></div>
-    <p class="hint">太く塗る→HP / トゲ・角→攻撃 / 軽い→素早さ / 横に長い→リーチ / 閉じた輪→盾 / 目→クリティカル / 脚→速さ / 腕→攻撃。色は相性: 赤&gt;緑&gt;青&gt;赤、黒は無属性。</p>
+    <p class="hint" data-i18n="draw.rules">太く塗る→HP / トゲ・角→攻撃 / 軽い→素早さ / 横に長い→リーチ / 閉じた輪→盾 / 目→クリティカル / 脚→速さ / 腕→攻撃。色は相性: 赤&gt;緑&gt;青&gt;赤、黒は無属性。</p>
   </section>
   <section>
-    <div class="row"><strong>バトル</strong><span id="roundinfo" class="hint"></span><span id="rendermode" class="hint"></span></div>
+    <div class="row"><strong data-i18n="battle.heading">バトル</strong><span id="roundinfo" class="hint"></span><span id="rendermode" class="hint"></span></div>
     <div class="hud">
       <div class="hpbox"><span id="nameA"></span><div class="hp"><i id="hpA"></i></div></div>
       <div class="hpbox right"><span id="nameB"></span><div class="hp"><i id="hpB"></i></div></div>
@@ -90,24 +90,24 @@
     <div class="stats" id="enemystats"></div>
     <div id="perks" class="row" hidden></div>
     <div class="row">
-      <button id="next" disabled>次のラウンド</button>
-      <button id="restart">最初から</button>
-      <button id="idle" title="画面端に置いて作業しながら眺める">放置モード</button>
-      <button id="idlewindow" hidden title="常に最前面の細長ウィンドウで放置モードを開く">放置ウィンドウ</button>
+      <button id="next" disabled data-i18n="battle.next">次のラウンド</button>
+      <button id="restart" data-i18n="battle.restart">最初から</button>
+      <button id="idle" data-i18n="idle.button" data-i18n-title="idle.buttonTitle" title="画面端に置いて作業しながら眺める">放置モード</button>
+      <button id="idlewindow" hidden data-i18n="idle.window" data-i18n-title="idle.windowTitle" title="常に最前面の細長ウィンドウで放置モードを開く">放置ウィンドウ</button>
     </div>
-    <div class="row"><span class="hint">音量</span><input id="volume" type="range" min="0" max="100" step="5" style="width:140px" /><span id="volumelabel" class="hint"></span></div>
+    <div class="row"><span class="hint" data-i18n="volume">音量</span><input id="volume" type="range" min="0" max="100" step="5" style="width:140px" /><span id="volumelabel" class="hint"></span></div>
     <div id="summary" hidden>
-      <div class="row"><strong>今回のラン</strong><span class="hint">使った絵と戦績。SNS 用の 1200×630 画像</span></div>
+      <div class="row"><strong data-i18n="summary.heading">今回のラン</strong><span class="hint" data-i18n="summary.hint">使った絵と戦績。SNS 用の 1200×630 画像</span></div>
       <canvas id="summarycard" width="1200" height="630"></canvas>
-      <div class="row"><button id="savecard">画像を保存</button><button id="copycard">画像をコピー</button><button id="sharelink" hidden title="この絵と対戦できるリンク。画像と一緒に投稿する">対戦リンクをコピー</button><span id="cardmsg" class="hint"></span></div>
+      <div class="row"><button id="savecard" data-i18n="summary.save">画像を保存</button><button id="copycard" data-i18n="summary.copy">画像をコピー</button><button id="sharelink" hidden data-i18n="summary.link" data-i18n-title="summary.linkTitle" title="この絵と対戦できるリンク。画像と一緒に投稿する">対戦リンクをコピー</button><span id="cardmsg" class="hint"></span></div>
     </div>
     <div id="log"></div>
-    <div id="idlebar"><span id="idlestats"></span><span id="idletokens"></span><button id="idleexit">描くに戻る</button></div>
+    <div id="idlebar"><span id="idlestats"></span><span id="idletokens"></span><button id="idleexit" data-i18n="idle.exit">描くに戻る</button></div>
     <details style="margin-top:8px">
-      <summary class="hint">友だちと対戦（共有コード）</summary>
-      <div class="row"><button id="copycode">今の絵のコードをコピー</button><span id="copied" class="hint"></span></div>
-      <div class="row"><input id="pastecode" placeholder="相手のコードを貼る" style="flex:1;padding:6px;font:inherit" /><button id="usecode">この絵と対戦</button></div>
-      <p class="hint">コードは絵そのもの。サーバ不要で、相手の落書きが次のラウンドの敵になる。</p>
+      <summary class="hint" data-i18n="share.summary">友だちと対戦（共有コード）</summary>
+      <div class="row"><button id="copycode" data-i18n="share.copy">今の絵のコードをコピー</button><span id="copied" class="hint"></span></div>
+      <div class="row"><input id="pastecode" placeholder="相手のコードを貼る" data-i18n-placeholder="share.paste" style="flex:1;padding:6px;font:inherit" /><button id="usecode" data-i18n="share.use">この絵と対戦</button></div>
+      <p class="hint" data-i18n="share.hint">コードは絵そのもの。サーバ不要で、相手の落書きが次のラウンドの敵になる。</p>
     </details>
   </section>
 </main>
