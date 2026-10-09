@@ -32,6 +32,12 @@
   .ach.locked { opacity:.45; }
   .ach .dot { width:14px; height:14px; border-radius:50%; background:var(--accent); border:2px solid var(--ink); flex:none; }
   .ach.locked .dot { background:#ddd; }
+  #gallery { display:none; width:min(760px, 94vw); gap:10px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  #gallery.open { display:grid; }
+  #gallery .empty { grid-column: 1 / -1; color:var(--muted); }
+  .gal { background:#fff; border:2px solid var(--ink); border-radius:10px; padding:8px; box-shadow:3px 3px 0 var(--ink); display:flex; flex-direction:column; gap:4px; font-size:12px; text-align:left; }
+  .gal canvas { width:100%; height:auto; background:#fafafa; border:1px dashed #bbb; border-radius:6px; }
+  .gal button { font-size:12px; padding:4px 8px; }
   .badge { display:inline-block; background:#222; color:#fff; border-radius:999px; padding:2px 10px; font-size:12px; margin-left:6px; transform:rotate(-2deg); }
   header { display:flex; justify-content:space-between; align-items:center; padding:10px 16px; border-bottom:2px dashed #cbc3b3; }
   header h1 { font-size:20px; margin:0; }
@@ -86,10 +92,13 @@
     <button id="startdaily" data-i18n="title.daily">日替わり</button>
     <div class="sub" id="dailybest"></div>
     <button id="titleidle" data-i18n="title.idle">放置モード</button>
+    <button id="showgallery" data-i18n="title.gallery">図鑑</button>
+    <div class="sub" id="galcount"></div>
     <button id="showach" data-i18n="title.achievements">実績</button>
     <div class="sub" id="achcount"></div>
     <button id="langtoggle2" data-i18n="lang.toggle">English</button>
   </div>
+  <div id="gallery"></div>
   <div id="achlist"></div>
 </section>
 <header>

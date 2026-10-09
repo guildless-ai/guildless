@@ -259,16 +259,40 @@ function refreshTitle(): void {
   const have = platform.unlocked();
   const ids = Object.keys(ACHIEVEMENTS) as AchievementId[];
   $('achcount').textContent = t('title.achCount', { n: have.length, total: ids.length });
+  refreshGallery();
   $('achlist').innerHTML = ids.map((id) => `<div class="ach ${have.includes(id) ? '' : 'locked'}"><span class="dot"></span><div><strong>${t(`ach.${id}.name` as Key)}</strong><div class="hint">${t(`ach.${id}.desc` as Key)}</div></div></div>`).join('');
 }
 
-function beginRun(rank: number, daily?: string): void {
+/** Title-screen bestiary: every doodle that won a round, with its stats, reusable as a starter. */
+function refreshGallery(): void {
+  const entries = loadGallery(localStorage).slice().reverse();
+  const box = $('gallery');
+  box.innerHTML = '';
+  $('galcount').textContent = t('title.galCount', { n: entries.length });
+  if (entries.length === 0) { const e = document.createElement('div'); e.className = 'empty'; e.textContent = t('title.galEmpty'); box.appendChild(e); return; }
+  for (const entry of entries) {
+    let d: Drawing;
+    try { d = decodeDrawing(entry.code); } catch { continue; }
+    const st = analyze(d);
+    const card = document.createElement('div'); card.className = 'gal';
+    const c = document.createElement('canvas'); c.width = 240; c.height = 150;
+    const g = c.getContext('2d')!; g.scale(240 / d.width, 150 / d.height); drawDrawing(g, d);
+    const info = document.createElement('div');
+    info.innerHTML = `<strong>${t('gal.round', { round: entry.round })}</strong><br>HP ${st.hp} · ATK ${st.atk} · SPD ${st.spd.toFixed(2)}`;
+    const use = document.createElement('button'); use.textContent = t('gal.use');
+    use.onclick = () => { drawing = { ...d, strokes: d.strokes.map((s) => ({ ...s, points: s.points.slice() })) }; beginRun(Number($<HTMLSelectElement>('rank').value), undefined, true); };
+    card.append(c, info, use);
+    box.appendChild(card);
+  }
+}
+
+function beginRun(rank: number, daily?: string, keepDrawing = false): void {
   history = [];
   $('summary').hidden = true;
   run = startRunWithTokens(rank, daily);
   document.body.classList.add('ingame');
   document.body.classList.toggle('daily', !!daily);
-  startRound(true);
+  startRound(true, keepDrawing);
   if (run.perks.length) log(t('idle.carry', { n: run.perks.length }));
 }
 
@@ -281,7 +305,8 @@ function toTitle(): void {
 $('start').onclick = () => beginRun(Number($<HTMLSelectElement>('rank').value));
 $('startdaily').onclick = () => beginRun(0, dailyKey());
 $('titleidle').onclick = () => { document.body.classList.add('ingame'); enterIdle(); if (!idle) toTitle(); };
-$('showach').onclick = () => $('achlist').classList.toggle('open');
+$('showach').onclick = () => { $('gallery').classList.remove('open'); if ($('achlist').classList.toggle('open')) $('achlist').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); };
+$('showgallery').onclick = () => { $('achlist').classList.remove('open'); if ($('gallery').classList.toggle('open')) $('gallery').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); };
 $('totitle').onclick = toTitle;
 $('langtoggle2').onclick = () => $('langtoggle').click();
 
