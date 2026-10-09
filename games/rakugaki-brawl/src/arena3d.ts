@@ -146,6 +146,10 @@ export class Arena3D implements ArenaRenderer {
     this.assign(this.b, b);
   }
 
+  updateFighter(side: 'a' | 'b', v: FighterView): void {
+    this.assign(side === 'a' ? this.a : this.b, v);
+  }
+
   resize(): void {
     const c = this.renderer.domElement;
     this.renderer.setSize(c.width, c.height, false);

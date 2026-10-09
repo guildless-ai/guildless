@@ -1,15 +1,15 @@
-import { analyze, totalInk } from './analyze.js';
+import { analyze, strokeInk, totalInk } from './analyze.js';
 import { phaseAt, poseOf } from './anim.js';
 import { Arena2D } from './arena2d.js';
 import { Arena3D } from './arena3d.js';
-import { ARENA_W, makeFighter, simulate, type BattleEvent, type Fighter } from './battle.js';
+import { ARENA_W, LiveBattle, makeFighter, refreshFighter, type BattleEvent, type Fighter } from './battle.js';
 import { generateEnemy } from './enemy.js';
 import { dailyKey, dailySeed, loadDailyBest, recordDaily } from './daily.js';
 import { afterWave, idleBudget, loadIdle, newIdle, saveIdle, type IdleState } from './idle.js';
 import { enemyInkScale, loadRank, MAX_RANK, playerInkScale, recordClear, unlockedRank } from './rank.js';
 import { loadGallery, pickRival, saveWinner } from './gallery.js';
 import { applyStatic, detectLang, LANG_KEY, lang, setLang, t, type Key } from './i18n.js';
-import { applyPerks, offerPerks, type Perk } from './perks.js';
+import { applyPerks, offerPerks, type Modifiers, type Perk } from './perks.js';
 import { ACHIEVEMENTS, bankIdleTokens, LocalPlatform, spendTokens, type AchievementId } from './platform.js';
 import { CSS, drawDrawing, makeFrameFactory } from './render.js';
 import { mulberry32 } from './rng.js';
@@ -58,8 +58,8 @@ const budget = () => Math.round(inkBudget(run.round, applyPerks(run.perks).inkBo
 const enemyBudget = (round: number) => Math.round(inkBudget(round) * enemyInkScale(run.rank));
 
 // ---------- drawing pad ----------
-function canvasPoint(e: PointerEvent): Point {
-  const r = pad.getBoundingClientRect();
+function canvasPoint(e: PointerEvent, el: HTMLCanvasElement = pad): Point {
+  const r = el.getBoundingClientRect();
   // object-fit: contain may letterbox the canvas inside its box; map through the drawn area only.
   const boxAspect = r.width / r.height, padAspect = PAD_W / PAD_H;
   let w = r.width, h = r.height, ox = 0, oy = 0;
@@ -274,16 +274,16 @@ function idleWave(): void {
   const a = makeFighter(t('idle.you'), structuredClone(drawing), 60, applyPerks(run.perks));
   const foe = generateEnemy(Math.min(10, 1 + Math.floor((st.wave - 1) / 2)), idleBudget(st.wave), st.seed + st.wave * 101);
   const b = makeFighter(`${foe.name} (wave ${st.wave})`, foe.drawing, ARENA_W - 60);
-  const result = simulate(a, b, st.seed + st.wave);
+  const live = new LiveBattle(a, b, st.seed + st.wave);
   sfx.enabled = false;
   busy = true;
   $('idlestats').textContent = t('idle.stats', { wave: st.wave, wins: st.wins, streak: st.streak, best: st.bestStreak });
-  replay(a, b, result.events, () => {
+  replay(live, applyPerks(run.perks), () => {
     busy = false;
     banner(null);
     if (!idle) return;
     const prevWins = idle.wins;
-    idle = afterWave(idle, result.winner);
+    idle = afterWave(idle, live.winner!);
     saveIdle(localStorage, idle);
     const tokens = bankIdleTokens(localStorage, prevWins, idle.wins);
     if (idle.streak >= 5) achieve('idle_streak_5');
@@ -403,17 +403,20 @@ $('fight').onclick = () => {
   busy = true;
   $<HTMLButtonElement>('fight').disabled = true;
   setPhase('battle');
-  const a = makeFighter(t('you'), structuredClone(drawing), 60, applyPerks(run.perks));
+  const mods = applyPerks(run.perks);
+  const a = makeFighter(t('you'), structuredClone(drawing), 60, mods);
   const b = makeFighter(enemy.name, structuredClone(enemy.drawing), ARENA_W - 60);
-  const result = simulate(a, b, run.seed + run.round);
+  const live = new LiveBattle(a, b, run.seed + run.round);
   log(t('round.log', { round: run.round, a: a.name, ahp: a.stats.hp, aatk: a.stats.atk, b: b.name, bhp: b.stats.hp, batk: b.stats.atk }));
-  replay(a, b, result.events, () => {
+  replay(live, mods, () => {
+    const winner = live.winner!;
     const wonRound = run.round;
-    history.push({ round: run.round, drawing: structuredClone(a.drawing), enemyName: enemy.name, result: result.winner === 'a' ? 'win' : result.winner === 'b' ? 'lose' : 'draw' });
-    run = applyResult(run, result.winner);
-    log(t(result.winner === 'a' ? 'win' : result.winner === 'b' ? 'lose' : 'draw'));
+    drawing = a.drawing; // keep what was drawn mid-battle for the card and the bestiary
+    history.push({ round: run.round, drawing: structuredClone(a.drawing), enemyName: enemy.name, result: winner === 'a' ? 'win' : winner === 'b' ? 'lose' : 'draw' });
+    run = applyResult(run, winner);
+    log(t(winner === 'a' ? 'win' : winner === 'b' ? 'lose' : 'draw'));
     banner(null);
-    if (result.winner === 'a') {
+    if (winner === 'a') {
       saveWinner(localStorage, a.drawing, wonRound);
       achieve('first_win');
       const t = a.stats.traits;
@@ -437,7 +440,7 @@ $('fight').onclick = () => {
         log(t('daily.recorded', { wins: best.wins, rounds: best.rounds }));
       }
       showSummary();
-    } else if (result.winner === 'a') {
+    } else if (winner === 'a') {
       showPerks();
     } else {
       $<HTMLButtonElement>('next').disabled = false;
@@ -445,15 +448,77 @@ $('fight').onclick = () => {
   });
 };
 
+// ---------- mid-battle drawing ("描き足し") ----------
+// Ink trickles back during the fight; anything you draw on the small pad is
+// added to your fighter at once: more ink = more HP, spikes = attack, and so on.
+const livepad = $<HTMLCanvasElement>('livepad');
+const liveCtx = livepad.getContext('2d')!;
+const LIVE_K = livepad.width / PAD_W;
+const LIVE_START = 0.15; // fraction of the round's ink budget banked when the bell rings
+const LIVE_RATE = 0.08;  // fraction regained per second
+const LIVE_CAP = 0.4;    // at most this fraction banked at once
+let liveInk = 0;
+let liveStroke: Stroke | null = null;
+let liveTarget: { fighter: Fighter; mods: Modifiers; onChange: () => void } | null = null;
+
+function redrawLive(): void {
+  liveCtx.setTransform(LIVE_K, 0, 0, LIVE_K, 0, 0);
+  liveCtx.clearRect(0, 0, PAD_W, PAD_H);
+  if (liveTarget) drawDrawing(liveCtx, liveTarget.fighter.drawing);
+  const cap = budget() * LIVE_CAP;
+  $('liveinkbar').style.width = `${Math.min(100, (liveInk / cap) * 100)}%`;
+  $('liveinktext').textContent = String(Math.round(liveInk));
+}
+
+livepad.addEventListener('pointerdown', (e) => {
+  if (!liveTarget || liveInk <= 0) return;
+  livepad.setPointerCapture(e.pointerId);
+  liveStroke = { points: [canvasPoint(e, livepad)], color, width: penFor(e) };
+  liveTarget.fighter.drawing.strokes.push(liveStroke);
+  redrawLive();
+});
+livepad.addEventListener('pointermove', (e) => {
+  if (!liveStroke || !liveTarget) return;
+  const p = canvasPoint(e, livepad);
+  const last = liveStroke.points[liveStroke.points.length - 1];
+  const cost = Math.hypot(p.x - last.x, p.y - last.y) * liveStroke.width;
+  if (liveInk - cost < 0) { endLiveStroke(); return; }
+  liveInk -= cost;
+  liveStroke.points.push(p);
+  redrawLive();
+});
+function endLiveStroke(): void {
+  if (!liveStroke || !liveTarget) return;
+  const st = liveStroke; liveStroke = null;
+  if (st.points.length < 2) { liveTarget.fighter.drawing.strokes.pop(); redrawLive(); return; }
+  const before = liveTarget.fighter.stats;
+  const { hpGain } = refreshFighter(liveTarget.fighter, liveTarget.mods);
+  const after = liveTarget.fighter.stats;
+  const parts: string[] = [];
+  if (hpGain > 0) parts.push(`HP +${hpGain}`);
+  if (after.atk !== before.atk) parts.push(`${t('stat.atk')} ${after.atk > before.atk ? '+' : ''}${after.atk - before.atk}`);
+  if (after.spd !== before.spd) parts.push(`${t('stat.spd')} ${after.spd > before.spd ? '+' : ''}${(after.spd - before.spd).toFixed(2)}`);
+  if (after.armor !== before.armor) parts.push(`${t('trait.shieldShort')} ${after.armor > before.armor ? '+' : ''}${after.armor - before.armor}`);
+  if (after.reach !== before.reach) parts.push(`${t('stat.reach')} ${after.reach > before.reach ? '+' : ''}${after.reach - before.reach}`);
+  $('livemsg').textContent = parts.length ? parts.join(' ・ ') : t('live.noChange');
+  sfx.swing();
+  liveTarget.onChange();
+  redrawLive();
+}
+livepad.addEventListener('pointerup', endLiveStroke);
+livepad.addEventListener('pointercancel', endLiveStroke);
+
 /**
- * Replay the event log: fighters walk in, poses come from anim.ts, the
- * renderer (3D paper cutouts or 2D fallback) draws each frame, the HUD is DOM.
+ * Run the live simulation on the frame clock: poses come from anim.ts, the
+ * renderer (3D paper cutouts or 2D fallback) draws each frame, the HUD is DOM,
+ * and strokes drawn on the live pad change the player's fighter immediately.
  */
-function replay(a: Fighter, b: Fighter, events: BattleEvent[], done: () => void): void {
+function replay(live: LiveBattle, mods: Modifiers, done: () => void): void {
+  const { a, b } = live;
   renderer.setFighters(viewOf(a), viewOf(b));
-  const hpA0 = a.stats.hp, hpB0 = b.stats.hp;
-  let hpA = hpA0, hpB = hpB0;
-  let xA = 60, xB = ARENA_W - 60;
+  let hpA0 = a.stats.hp, hpB0 = b.stats.hp;
+  const events = live.events;
+  let xA = a.x, xB = b.x;
   let i = 0;
   const popups: Popup[] = [];
   let shake = 0;
@@ -465,19 +530,42 @@ function replay(a: Fighter, b: Fighter, events: BattleEvent[], done: () => void)
   const start = lastNow;
   let finished = false;
   let endAt = Infinity;
-  let nextSwing = 0; // index into events of the next attack whose wind-up has not played
+  let simT = 0;
   const swingLead = 0.22;
+  const pendingSwings: number[] = [];
   hud(a.name, b.name, CSS[a.stats.element], CSS[b.stats.element], 1, 1);
+
+  liveInk = budget() * LIVE_START;
+  liveTarget = {
+    fighter: a, mods,
+    onChange: () => {
+      hpA0 = a.stats.hp;
+      renderer.updateFighter('a', viewOf(a));
+      renderStats($('mystats'), a.stats);
+      popups.push({ x: xA, text: '+', color: CSS[a.stats.element], life: 1 });
+    },
+  };
+  $('livebox').hidden = !!idle;
+  if (idle) liveTarget = null;
+  renderStats($('mystats'), a.stats);
+  redrawLive();
 
   const frame = (now: number) => {
     if (now < pauseUntil) { frozen += (now - lastNow) / 1000; lastNow = now; }
     else lastNow = now;
     const tm = (now - start) / 1000 - frozen;
-    // Wind-up whoosh slightly before each hit lands.
-    while (nextSwing < events.length && events[nextSwing].t - swingLead <= tm) {
-      if (events[nextSwing].kind === 'hit') sfx.swing();
-      nextSwing++;
+    // Advance the simulation up to the replay clock; the sim runs slightly
+    // ahead so wind-up whooshes can lead each hit.
+    if (!finished) {
+      const target = tm + swingLead;
+      if (target > simT) {
+        for (const ev of live.step(target - simT)) if (ev.kind === 'hit') pendingSwings.push(ev.t);
+        simT = target;
+      }
+      liveInk = Math.min(budget() * LIVE_CAP, liveInk + budget() * LIVE_RATE * (1 / 60));
+      if (!liveStroke) redrawLive();
     }
+    while (pendingSwings.length && pendingSwings[0] - swingLead <= tm) { pendingSwings.shift(); sfx.swing(); }
     while (!finished && i < events.length && events[i].t <= tm) {
       const ev = events[i++];
       if (ev.kind === 'hit') {
@@ -488,10 +576,12 @@ function replay(a: Fighter, b: Fighter, events: BattleEvent[], done: () => void)
         flashLife = 0.12;
         if (big) pauseUntil = now + 90;
         const text = (ev.crit ? '!! ' : '') + ev.dmg + (ev.mult > 1 ? t('hit.super') : ev.mult < 1 ? t('hit.weak') : '');
-        if (ev.from === 'a') { hpB -= ev.dmg; popups.push({ x: xB, text, color: CSS[a.stats.element], life: 1 }); }
-        else { hpA -= ev.dmg; popups.push({ x: xA, text, color: CSS[b.stats.element], life: 1 }); }
+        if (ev.from === 'a') popups.push({ x: xB, text, color: CSS[a.stats.element], life: 1 });
+        else popups.push({ x: xA, text, color: CSS[b.stats.element], life: 1 });
       } else {
         finished = true;
+        $('livebox').hidden = true;
+        liveTarget = null; liveStroke = null;
         endAt = tm + 2.2; // KO topple, then the winner's victory hops
         if (ev.winner === 'a') { sfx.win(); banner(t('win'), CSS[a.stats.element]); }
         else if (ev.winner === 'b') { sfx.lose(); banner(t('lose'), '#8a8378'); }
@@ -510,6 +600,9 @@ function replay(a: Fighter, b: Fighter, events: BattleEvent[], done: () => void)
     for (const p of popups) p.life -= dt * 1.4;
     while (popups.length && (popups[0].life <= 0 || popups.length > 6)) popups.shift();
     const phaseA = phaseAt(events, 'a', tm, movedA), phaseB = phaseAt(events, 'b', tm, movedB);
+    // HP shown lags the sim by swingLead: derive it from the events already replayed.
+    let hpA = hpA0, hpB = hpB0;
+    for (let k = 0; k < i; k++) { const ev = events[k]; if (ev.kind === 'hit') { if (ev.from === 'a') hpB -= ev.dmg; else hpA -= ev.dmg; } }
     renderer.draw({
       t: tm, xA, xB,
       poseA: poseOf(phaseA), poseB: poseOf(phaseB), phaseA, phaseB,
@@ -525,7 +618,6 @@ function replay(a: Fighter, b: Fighter, events: BattleEvent[], done: () => void)
   requestAnimationFrame(frame);
 }
 
-/** Big result text over the arena; null hides it. */
 function banner(text: string | null, color = '#222'): void {
   const el = $('banner');
   if (!text) { el.hidden = true; return; }

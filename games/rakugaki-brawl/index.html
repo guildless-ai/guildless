@@ -74,6 +74,9 @@
   #stagewrap .hud { font-size:16px; font-weight:700; }
   #stagewrap .hp { height:18px; }
   #arena { aspect-ratio: 16 / 10; width:min(100%, calc((100vh - 240px) * 1.6)); height:auto; margin:0 auto; background:transparent; border:0; }
+  #livebox { position:absolute; left:12px; bottom:12px; width:260px; background:#fff; border:2px solid var(--ink); border-radius:10px; padding:8px; box-shadow:3px 3px 0 var(--ink); transform:rotate(-1.2deg); }
+  #livebox canvas { width:100%; height:auto; border:1px dashed #bbb; cursor:crosshair; }
+  #livebox .meter { height:10px; }
   #battlebar { justify-content:center; }
   #battlebar button { font-size:18px; padding:12px 20px; }
   #perks { justify-content:center; }
@@ -184,6 +187,11 @@
         <canvas id="arena" width="1280" height="800"></canvas>
         <div id="banner" class="banner" hidden></div>
         <div id="toast" class="toast" hidden></div>
+        <div id="livebox" hidden>
+          <div class="row" style="margin:0 0 4px"><strong data-i18n="live.heading">描き足し</strong><div class="meter"><i id="liveinkbar"></i></div><span id="liveinktext" class="hint"></span></div>
+          <canvas id="livepad" width="320" height="240"></canvas>
+          <div id="livemsg" class="hint" data-i18n="live.hint">インクが回復したら戦闘中に描き足せる。太く→HP、トゲ→攻撃</div>
+        </div>
       </div>
       <div id="perks" class="row" hidden></div>
       <div class="row" id="battlebar">

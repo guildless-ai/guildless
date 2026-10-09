@@ -41,6 +41,8 @@ export interface ReplayState {
 
 export interface ArenaRenderer {
   setFighters(a: FighterView, b: FighterView): void;
+  /** Replace one fighter's artwork mid-battle (the doodle was drawn on). */
+  updateFighter(side: 'a' | 'b', v: FighterView): void;
   draw(s: ReplayState): void;
   /** Show only the enemy, idle, before the round starts. */
   preview(b: FighterView, xB: number): void;

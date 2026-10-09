@@ -13,6 +13,7 @@ export class Arena2D implements ArenaRenderer {
     this.ctx = canvas.getContext('2d')!;
   }
   setFighters(a: FighterView, b: FighterView): void { this.a = a; this.b = b; }
+  updateFighter(side: 'a' | 'b', v: FighterView): void { if (side === 'a') this.a = v; else this.b = v; }
   resize(): void { /* draws from canvas size every frame */ }
   preview(b: FighterView, xB: number): void {
     this.a = null; this.b = b;
